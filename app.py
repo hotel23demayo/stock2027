@@ -25,6 +25,12 @@ from core.consumos import (
 )
 from core.reserva_express import crear_reserva_express, obtener_habitaciones_disponibles, validar_datos_reserva
 from core.identidad_estadias import procesar_identidades
+from core.pase_caja import (
+    leer_pasajeros,
+    leer_consumos,
+    obtener_pasajeros_con_salida,
+    vincular_consumos_bebidas
+)
 
 app = Flask(__name__)
 app.secret_key = 'temporada_2026_recepcion_key_secreta'
@@ -139,6 +145,44 @@ def dashboard():
                          reservadas=datos['reservadas'],
                          estadisticas=datos['estadisticas'],
                          checkouts_hoy=datos['checkouts_hoy'])
+
+@app.route('/pase-turno')
+def pase_turno():
+    """Informe de pase de turno de recepción."""
+
+    # Verificar que existan los archivos operativos.
+    if not os.path.exists(DB_PASAJEROS):
+        flash('No se encuentra el archivo de pasajeros.', 'warning')
+        return redirect('/dashboard')
+
+    if not os.path.exists(DB_CONSUMOS):
+        flash('No se encuentra el archivo de consumos.', 'warning')
+        return redirect('/dashboard')
+
+    # Leer los archivos sin modificar sus contenidos.
+    df_pasajeros = leer_pasajeros(DB_PASAJEROS)
+    df_consumos = leer_consumos(DB_CONSUMOS)
+
+    # Identificar pasajeros con salida hoy.
+    salidas = obtener_pasajeros_con_salida(df_pasajeros)
+
+    # Vincular y calcular los consumos de bebidas.
+    resultado = vincular_consumos_bebidas(
+        salidas,
+        df_consumos
+    )
+
+    return render_template(
+        'pase_turno.html',
+        salidas=salidas,
+        totales=resultado['totales_por_estadia'],
+        detalle=resultado['detalle_confirmado'],
+        pendientes=resultado['pendientes'],
+        inconsistencias=resultado['inconsistencias'],
+        estadias_duplicadas=resultado['estadias_duplicadas'],
+        fecha_emision=datetime.now().strftime('%d/%m/%Y'),
+        hora_emision=datetime.now().strftime('%H:%M')
+    )
 
 @app.route('/listado-pasajeros-alojados')
 def listado_pasajeros_alojados():
