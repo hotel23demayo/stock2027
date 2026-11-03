@@ -24,6 +24,13 @@ Sistema web modular para la gestión integral de consumos del hotel con **Dashbo
 ✅ **Backups automáticos** al subir nuevos archivos de pasajeros  
 ✅ **Descargas temporales** sin almacenamiento persistente de exportaciones  
 ✅ **Consulta de consumos centralizada** en el header del dashboard  
+✅ **Identidad de estadías** (`id_estadia`): cada cuenta de consumos pertenece a una estadía, no a un número de habitación  
+✅ **Bebidas rápidas** con catálogo de productos (`data/catalogo_productos.csv`)  
+✅ **Anulación de consumos** conservando el registro (nunca se borran)  
+✅ **Informe de consumos** consolidado por producto (pantalla y XLSX)  
+✅ **Pase de turno** de recepción con planilla imprimible de pase de caja  
+✅ **Listado diario de pasajeros alojados**  
+✅ **Reinicio de datos por CLI** con backup y confirmación (`reiniciar_datos.py`)  
 
 ---
 
@@ -342,6 +349,18 @@ Todas las exportaciones utilizan archivos temporales que:
 - Formato: Consolidado con todos los checkouts de hoy
 - Archivo: `checkouts_DD-MM-YYYY.xlsx`
 
+**4. Informe de Consumos (XLSX)**
+- Ruta: `/informe-consumos` (pantalla) y `/informe-consumos-xlsx` (descarga)
+- Formato: Detalle consolidado de productos consumidos
+
+**5. Pase de Turno**
+- Ruta: `/pase-turno`
+- Formato: Informe de recepción con planilla imprimible de pase de caja
+
+**6. Listado de Pasajeros Alojados**
+- Ruta: `/listado-pasajeros-alojados`
+- Formato: Listado diario actualizado, imprimible
+
 ---
 
 ## 🗂️ Arquitectura del Proyecto
@@ -354,25 +373,64 @@ recepcion2026-consumos/
 ├── run_hotel.sh              # Script automatizado de instalación
 ├── iniciar_recepcion.sh      # Script de inicio rápido
 ├── generar_consumos_prueba.py # Generador de datos de prueba
+├── reiniciar_datos.py        # Reinicio de consumos/pasajeros con backup (CLI)
 │
 ├── data/                      # Datos persistentes
 │   ├── pasajeros.csv         # Registro actual de huéspedes
 │   ├── consumos_diarios.csv  # Base de datos de consumos
-│   └── backups/              # Backups automáticos de pasajeros
+│   ├── catalogo_productos.csv # Catálogo y precios (versionado)
+│   └── backups/              # Backups automáticos y de reinicio
 │
 ├── core/                      # Módulos principales
 │   ├── dashboard.py          # Lógica de estados y checkout
-│   └── consumos.py           # CRUD de consumos
+│   ├── consumos.py           # CRUD de consumos (filtrado por id_estadia)
+│   ├── identidad_estadias.py # Asigna/conserva id_estadia por pasajero
+│   ├── reserva_express.py    # Reservas walk-in
+│   ├── cambio_habitacion.py  # Cambio total/parcial con traspaso de consumos
+│   ├── informe_consumos.py   # Informe consolidado de productos
+│   └── pase_caja.py          # Pase de turno / pase de caja
 │
 ├── templates/                 # Vistas HTML
 │   ├── dashboard.html        # Grilla de 53 habitaciones
 │   ├── ficha_habitacion.html # Vista individual de habitación
 │   ├── checkout.html         # Resumen de checkout
+│   ├── bebidas_rapidas.html  # Carga rápida de bebidas
+│   ├── informe_consumos.html # Informe de consumos
+│   ├── pase_turno.html       # Pase de turno / caja imprimible
+│   ├── listado_pasajeros_alojados.html # Listado diario de alojados
 │   └── gestionar_pasajeros.html # Carga de archivos CSV
+│
+├── tests/                     # Suite unittest (python3 -m unittest discover -s tests)
+│
+├── docs/                      # Diseño y arquitectura
 │
 └── static/                    # Recursos estáticos
     └── (CSS, JS, imágenes)
 ```
+
+---
+
+## 🧾 Cuentas de Consumos por Estadía
+
+- Cada pasajero tiene un `id_estadia` (se genera en reservas express y en importaciones de CSV).
+- La ficha, los totales, el checkout y el dashboard filtran los consumos por los `id_estadia` de los ocupantes **actuales**; una reserva nueva en la misma habitación empieza en cero.
+- Los consumos históricos sin `id_estadia` se conservan en el CSV, no se suman a estadías nuevas y se advierten en la ficha.
+- El cambio de habitación (total o parcial) traslada solo los consumos de la misma estadía.
+- Los pasajeros con estadía finalizada no se listan como ocupantes.
+- Detalle: [CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md](CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md).
+
+---
+
+## 🧹 Reinicio de Datos (empezar de cero)
+
+Para iniciar el seguimiento real tras las pruebas:
+
+```bash
+python3 reiniciar_datos.py --simular   # vista previa sin cambios
+python3 reiniciar_datos.py             # backup + vaciado (pide escribir REINICIAR)
+```
+
+Vacía `consumos_diarios.csv` y `pasajeros.csv` (conserva encabezados), guarda backup en `data/backups/reinicio_*` y **no toca el catálogo**. Opciones y recomendaciones: [REINICIO_DATOS.md](REINICIO_DATOS.md).
 
 ---
 
@@ -432,6 +490,8 @@ pip install -r requirements.txt
 
 - ✅ **Backups automáticos**: Al cargar nuevo archivo de pasajeros, se crea backup del anterior
 - ✅ **Formato**: `pasajeros_backup_YYYYMMDD_HHMMSS.csv` en `data/backups/`
+- ✅ **Reinicio por CLI**: `reiniciar_datos.py` respalda en `data/backups/reinicio_*` antes de vaciar (ver [REINICIO_DATOS.md](REINICIO_DATOS.md))
+- ✅ **Historial permanente**: los consumos se anulan (`estado=anulado`), no se borran
 - ✅ **Validaciones**: Verificación de formato CSV, fechas y habitaciones
 - ✅ **Archivos temporales**: Exportaciones no persisten en el servidor
 - ⚠️ **Importante**: Los checkouts eliminan registros de forma permanente (backup recomendado)
@@ -439,6 +499,16 @@ pip install -r requirements.txt
 ---
 
 ## 🆕 Changelog
+
+### v7.0 (11/2026) - Identidad de Estadías, Pase de Turno y Reinicio de Datos
+- ➕ **`id_estadia`**: identidad de estadía para pasajeros y consumos (`core/identidad_estadias.py`)
+- ➕ **Bebidas rápidas** con catálogo de productos y **anulación** de consumos conservando el registro
+- ➕ **Informe de consumos** (pantalla y XLSX) y **listado de pasajeros alojados**
+- ➕ **Pase de turno** y planilla imprimible de pase de caja (`/pase-turno`)
+- ➕ **`reiniciar_datos.py`**: reinicio de consumos/pasajeros con simulación, backup y confirmación
+- 🐛 **Corregido**: una reserva express mostraba consumos de un huésped anterior de la misma habitación
+- 🔧 **Cambio**: totales, checkout, dashboard y cambio de habitación filtran por `id_estadia`; consumos sin ID quedan excluidos con advertencia
+- 📝 **Documentado**: [REINICIO_DATOS.md](REINICIO_DATOS.md), [CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md](CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md)
 
 ### v6.1 (25/01/2026) - Gestión de Reservas Futuras y UX Mejorado
 - ➕ **Herramienta de gestión de reservas futuras** (`gestionar_reservas_futuras.py`)

@@ -88,6 +88,17 @@ Los usuarios NO técnicos podrán:
 - ✅ **Actualizable**: `git pull` y listo
 - ✅ **Aislado**: No contamina Python del sistema
 
+## 🧹 Antes de Empezar el Seguimiento Real
+
+Después de las pruebas, con la app cerrada y tras un `git pull`:
+
+```bash
+python3 reiniciar_datos.py --simular   # vista previa
+python3 reiniciar_datos.py             # backup + vaciado de consumos y pasajeros
+```
+
+No modifica el catálogo de productos. Ver [REINICIO_DATOS.md](REINICIO_DATOS.md).
+
 ## 🔧 Solución de Problemas
 
 Si algo no funciona, consulta el archivo **INSTALACION_UBUNTU.md** que tiene:
