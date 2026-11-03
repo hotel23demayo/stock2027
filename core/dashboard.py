@@ -20,6 +20,16 @@ def extraer_num_hab(valor):
         return None
 
 
+def _ids_estadia_pasajeros(pasajeros):
+    """Obtiene IDs no vacíos de filas de pasajeros."""
+    ids_estadia = set()
+    for pasajero in pasajeros:
+        identificador = pasajero.get('id_estadia', '')
+        if pd.notna(identificador) and str(identificador).strip():
+            ids_estadia.add(str(identificador).strip())
+    return sorted(ids_estadia)
+
+
 # Estructura del hotel
 PISOS = {
     1: list(range(101, 122)),  # 101-121 (21 habitaciones)
@@ -139,7 +149,12 @@ def obtener_habitaciones_ocupadas(archivo_pasajeros='data/pasajeros.csv'):
                 plazas_titular = 0
 
             habitaciones_ocupadas[num_hab] = {
-                'id_estadia': str(titular.get('id_estadia', '')).strip(),
+                'id_estadia': (
+                    str(titular.get('id_estadia', '')).strip()
+                    if pd.notna(titular.get('id_estadia', ''))
+                    else ''
+                ),
+                'ids_estadia': _ids_estadia_pasajeros(pasajeros_hab),
                 'pasajero': titular['Apellido y nombre'],
                 'plazas': max(cantidad_pasajeros, plazas_titular),
                 'ingreso': titular['Fecha de ingreso'],
@@ -291,16 +306,21 @@ def obtener_todos_pasajeros_habitacion(num_habitacion, archivo_pasajeros='data/p
         fecha_ingreso = row['Fecha de ingreso']
         try:
             ingreso_dt = datetime.strptime(fecha_ingreso, '%d/%m/%Y')
+            egreso_dt = datetime.strptime(row.get('Fecha de egreso', ''), '%d/%m/%Y')
             hoy_dt = datetime.strptime(fecha_hoy, '%d/%m/%Y')
             
-            if ingreso_dt > hoy_dt:
-                continue  # No ha ingresado aún
+            if ingreso_dt > hoy_dt or egreso_dt < hoy_dt:
+                continue
         except:
             pass  # Si hay error en fecha, incluir
         
         # Agregar pasajero a la lista
         pasajeros.append({
-            'id_estadia': str(row.get('id_estadia', '')).strip(),
+            'id_estadia': (
+                str(row.get('id_estadia', '')).strip()
+                if pd.notna(row.get('id_estadia', ''))
+                else ''
+            ),
             'nombre': row['Apellido y nombre'],
             'voucher': str(row.get('Voucher', '')).strip(),
             'edad': int(row.get('Edad', 0)),
@@ -368,7 +388,10 @@ def obtener_habitaciones_reservadas_futuras(archivo_pasajeros='data/pasajeros.cs
     return habitaciones_futuras
 
 
-def obtener_habitaciones_con_consumos(archivo_consumos='data/consumos_diarios.csv'):
+def obtener_habitaciones_con_consumos(
+    archivo_consumos='data/consumos_diarios.csv',
+    habitaciones_ocupadas=None
+):
     """
     Obtiene la lista de habitaciones que tienen consumos registrados.
     Retorna un set con los números de habitación.
@@ -384,7 +407,37 @@ def obtener_habitaciones_con_consumos(archivo_consumos='data/consumos_diarios.cs
     if df.empty or 'habitacion' not in df.columns:
         return set()
 
-    return set(df['habitacion'].astype(int).unique())
+    if habitaciones_ocupadas is None:
+        habitaciones_ocupadas = obtener_habitaciones_ocupadas()
+
+    if 'id_estadia' not in df.columns:
+        return set()
+
+    ids_consumos = df['id_estadia'].fillna('').astype(str).str.strip()
+    habitaciones_consumos = pd.to_numeric(df['habitacion'], errors='coerce')
+    habitaciones_con_consumos = set()
+
+    for num_hab, datos in habitaciones_ocupadas.items():
+        ids_estadia = set()
+        for identificador in datos.get('ids_estadia', []):
+            if pd.notna(identificador) and str(identificador).strip():
+                ids_estadia.add(str(identificador).strip())
+        if not ids_estadia and 'ids_estadia' not in datos:
+            identificador = datos.get('id_estadia', '')
+            if pd.notna(identificador) and str(identificador).strip():
+                ids_estadia.add(str(identificador).strip())
+
+        if not ids_estadia:
+            continue
+
+        tiene_consumos = (
+            (habitaciones_consumos == int(num_hab))
+            & ids_consumos.isin(ids_estadia)
+        ).any()
+        if tiene_consumos:
+            habitaciones_con_consumos.add(int(num_hab))
+
+    return habitaciones_con_consumos
 
 
 def es_checkout_hoy(fecha_egreso):
@@ -464,6 +517,7 @@ def obtener_habitaciones_checkout_pendientes(archivo_pasajeros='data/pasajeros.c
 
         habitaciones_pendientes[num_hab] = {
             'pasajero': titular['Apellido y nombre'],
+            'ids_estadia': _ids_estadia_pasajeros(pasajeros_hab),
             'plazas': max(cantidad_pasajeros, plazas_titular),
             'ingreso': titular['Fecha de ingreso'],
             'egreso': titular['Fecha de egreso'],
@@ -520,7 +574,9 @@ def obtener_datos_dashboard():
     """
     habitaciones_ocupadas = obtener_habitaciones_ocupadas()
     habitaciones_reservadas = obtener_habitaciones_reservadas_futuras()
-    habitaciones_con_consumos = obtener_habitaciones_con_consumos()
+    habitaciones_con_consumos = obtener_habitaciones_con_consumos(
+        habitaciones_ocupadas=habitaciones_ocupadas
+    )
     checkouts_hoy = obtener_habitaciones_checkout()
     
     # Calcular estados de todas las habitaciones
@@ -571,15 +627,41 @@ def obtener_datos_dashboard():
     }
 
 
-def obtener_total_consumos_habitacion(num_habitacion, archivo_consumos='data/consumos_diarios.csv'):
+def obtener_total_consumos_habitacion(
+    num_habitacion,
+    archivo_consumos='data/consumos_diarios.csv',
+    id_estadia=None
+):
     """
-    Calcula el total de consumos de una habitación específica.
+    Calcula el total de consumos de una habitación, opcionalmente por estadía.
     """
     if not os.path.exists(archivo_consumos):
         return 0
     
     df = pd.read_csv(archivo_consumos)
     consumos_hab = df[df['habitacion'] == num_habitacion]
+
+    if id_estadia is not None:
+        if isinstance(id_estadia, (list, tuple, set)):
+            ids_estadia = {
+                str(identificador).strip()
+                for identificador in id_estadia
+                if identificador is not None and str(identificador).strip()
+            }
+        else:
+            identificador = str(id_estadia).strip()
+            ids_estadia = {identificador} if identificador else set()
+
+        if not ids_estadia or 'id_estadia' not in consumos_hab.columns:
+            return 0
+
+        consumos_hab = consumos_hab[
+            consumos_hab['id_estadia']
+            .fillna('')
+            .astype(str)
+            .str.strip()
+            .isin(ids_estadia)
+        ]
     
     if consumos_hab.empty:
         return 0

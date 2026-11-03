@@ -413,7 +413,10 @@ def vista_checkout_masivo():
 
     for num_hab in sorted(habitaciones_checkout.keys()):
         datos = habitaciones_checkout[num_hab]
-        totales_consumos = obtener_total_consumos(num_hab)
+        totales_consumos = obtener_total_consumos(
+            num_hab,
+            id_estadia=datos.get('ids_estadia', datos.get('id_estadia', ''))
+        )
 
         resumen_checkouts.append({
             'habitacion': num_hab,
@@ -1119,12 +1122,40 @@ def cambiar_habitacion_route(num_habitacion):
         # Obtener datos del pasajero
         datos_pasajero = habitaciones_ocupadas[num_habitacion]
 
-        # Obtener consumos para mostrar cuántos hay
+        # Contar solo consumos identificados con la estadía actual.
+        ids_estadia = datos_pasajero.get(
+            'ids_estadia',
+            [datos_pasajero.get('id_estadia', '')]
+        )
+        cantidad_consumos = 0
         if os.path.exists(DB_CONSUMOS):
             df_consumos = pd.read_csv(DB_CONSUMOS)
-            cantidad_consumos = len(df_consumos[df_consumos['habitacion'] == num_habitacion])
-        else:
-            cantidad_consumos = 0
+            if 'habitacion' in df_consumos.columns and 'id_estadia' in df_consumos.columns:
+                ids_actuales = {
+                    str(identificador).strip()
+                    for identificador in ids_estadia
+                    if (
+                        identificador is not None
+                        and pd.notna(identificador)
+                        and str(identificador).strip()
+                    )
+                }
+                ids_consumos = (
+                    df_consumos['id_estadia']
+                    .fillna('')
+                    .astype(str)
+                    .str.strip()
+                )
+                habitaciones = pd.to_numeric(
+                    df_consumos['habitacion'],
+                    errors='coerce'
+                )
+                cantidad_consumos = int(
+                    (
+                        (habitaciones == num_habitacion)
+                        & ids_consumos.isin(ids_actuales)
+                    ).sum()
+                )
 
         # Obtener habitaciones disponibles
         habitaciones_disponibles = obtener_habitaciones_disponibles_para_cambio(num_habitacion)
