@@ -369,10 +369,18 @@
 
                     <div class="d-flex gap-2 flex-wrap align-items-center">
                         <a href="/gestionar-pasajeros" class="btn btn-outline-primary btn-lg">
-                            👥 Gestionar Pasajeros
+                            👥 Cargar Pasajeros
                         </a>
                         <a href="/reserva-express" class="btn btn-success btn-lg">
                             🛎️ Reserva Express
+                        </a>
+                        <a href="{{ url_for('listado_pasajeros_alojados') }}"
+                        class="btn btn-outline-success btn-lg">
+                            📋 Listado de Pax Alojados
+                        </a>
+                        <a href="{{ url_for('pase_turno') }}"
+                        class="btn btn-outline-dark btn-lg">
+                            📋 Informe Pase de Turno
                         </a>
                     </div>
 

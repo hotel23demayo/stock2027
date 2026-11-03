@@ -1,0 +1,521 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe Pase de Turno</title>
+
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 25px;
+            color: #222;
+            background: #f5f5f5;
+        }
+
+        .contenedor {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin-bottom: 5px;
+        }
+
+        h2 {
+            font-size: 17px;
+            margin-top: 30px;
+            border-bottom: 1px solid #999;
+            padding-bottom: 7px;
+        }
+
+        .datos-emision {
+            text-align: right;
+            font-size: 13px;
+            color: #555;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        th, td {
+            border: 1px solid #bbb;
+            padding: 9px;
+            text-align: left;
+        }
+
+        th {
+            background: #e9ecef;
+        }
+
+        .numero {
+            text-align: right;
+        }
+
+        .total {
+            font-weight: bold;
+        }
+
+        .encabezado {
+            border: 1px solid #444;
+            padding: 12px;
+        }
+
+        .datos-turno {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        .resumen-cobro {
+            padding: 12px;
+            margin-top: 15px;
+            border: 1px solid #999;
+            background: #f7f7f7;
+        }
+
+        .estado-fila {
+            display: block;
+            margin-top: 4px;
+            font-size: 11px;
+            font-weight: normal;
+        }
+
+        .estado-a-cobrar {
+            color: #8a1c12;
+        }
+
+        .estado-sin-deuda {
+            color: #256029;
+        }
+
+        .aviso {
+            padding: 12px;
+            margin-top: 15px;
+            background: #fff3cd;
+            border: 1px solid #ffe69c;
+        }
+
+        .acciones {
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 18px;
+            cursor: pointer;
+        }
+
+        .respaldo {
+            margin-top: 30px;
+        }
+
+        .impresion-planilla {
+            display: none;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                background: white;
+                color: #000;
+                font-size: 10pt;
+            }
+
+            .contenedor {
+                padding: 0;
+                max-width: none;
+            }
+
+            .contenedor > *:not(.impresion-planilla) {
+                display: none !important;
+            }
+
+            .impresion-planilla {
+                display: block;
+            }
+
+            .planilla-pagina {
+                height: 273mm;
+                overflow: hidden;
+                page-break-after: always;
+                break-after: page;
+            }
+
+            .planilla-pagina:last-child {
+                page-break-after: auto;
+                break-after: auto;
+            }
+
+            .planilla-encabezado {
+                margin-bottom: 5mm;
+                border: 1px solid #222;
+                text-align: center;
+            }
+
+            .planilla-encabezado h1 {
+                margin: 0;
+                padding: 2mm;
+                font-size: 11pt;
+            }
+
+            .planilla-datos {
+                display: flex;
+                justify-content: space-between;
+                padding: 1.5mm 2mm;
+                border-top: 1px solid #222;
+                font-size: 9pt;
+                font-weight: bold;
+            }
+
+            .planilla-titulo {
+                margin: 0;
+                padding: 1.5mm;
+                border: 1px solid #222;
+                border-bottom: 0;
+                text-align: center;
+                font-size: 9pt;
+            }
+
+            .planilla-tabla {
+                width: 100%;
+                margin: 0;
+                table-layout: fixed;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+            .planilla-tabla th,
+            .planilla-tabla td {
+                box-sizing: border-box;
+                height: 7mm;
+                padding: 0 1.5mm;
+                border: 1px solid #222;
+            }
+
+            .planilla-tabla th {
+                background: #fff;
+                text-align: center;
+            }
+
+            .planilla-tabla .col-hab { width: 10%; }
+            .planilla-tabla .col-titular { width: 24%; }
+            .planilla-tabla .col-estadia { width: 17%; }
+            .planilla-tabla .col-map { width: 13%; }
+            .planilla-tabla .col-bebidas { width: 13%; }
+            .planilla-tabla .col-pago { width: 13%; }
+            .planilla-tabla .col-total { width: 10%; }
+
+            .planilla-tabla .col-hab {
+                text-align: center;
+            }
+
+            .planilla-tabla .col-titular {
+                text-align: left;
+                overflow-wrap: anywhere;
+            }
+
+            .planilla-tabla tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+        }
+    </style>
+</head>
+
+<body>
+<div class="contenedor">
+
+    <div class="acciones">
+        <button onclick="window.print()">Imprimir informe</button>
+        <a href="{{ url_for('dashboard') }}">Volver al dashboard</a>
+    </div>
+
+    <header class="encabezado">
+        <h1>PASE DE CAJA E INFORMACIÓN A TURNO MAÑANA</h1>
+        <strong>TURNO 00 A 08 HS</strong>
+
+        <div class="datos-turno">
+            <span>Fecha: {{ fecha_emision }}</span>
+        </div>
+    </header>
+
+    <section class="impresion-planilla" aria-label="Planilla imprimible de pase de caja">
+        {% for pagina in paginas_pase %}
+        <div class="planilla-pagina">
+            <header class="planilla-encabezado">
+                <h1>Pase de caja e información a turno mañana</h1>
+                <div class="planilla-datos">
+                    <span>Turno: 00 a 08 hs</span>
+                    <span>Fecha: {{ fecha_emision }}</span>
+                </div>
+            </header>
+
+            <h2 class="planilla-titulo">Detalle a cobrar de habitaciones con salida</h2>
+
+            <table class="planilla-tabla">
+                <thead>
+                    <tr>
+                    <th class="col-hab">HAB</th>
+                    <th class="col-titular">TITULAR</th>
+                    <th class="col-estadia">Estadía</th>
+                    <th class="col-map">MAP</th>
+                    <th class="col-bebidas">Bebidas</th>
+                    <th class="col-pago">Forma de pago</th>
+                    <th class="col-total">Total</th>
+                </tr>
+                </thead>
+                <tbody>
+                    {% for fila in pagina %}
+                    <tr>
+                        <td class="col-hab">{{ fila['habitacion'] }}</td>
+                        <td class="col-titular">{{ fila['titular'] }}</td>
+                        <td></td>
+                        <td></td>
+                        <td class="importe">
+                            {% if fila['bebidas'] is not none %}
+                            $ {{ "%.2f"|format(fila['bebidas']) }}
+                            {% endif %}
+                        </td>
+                        <td></td>
+                        <td class="importe">
+                            {% if fila['bebidas'] is not none %}
+                            $ {{ "%.2f"|format(fila['bebidas']) }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </section>
+
+    <h2>Detalle a cobrar de habitaciones con salida</h2>
+
+    <div class="resumen-cobro">
+        {% if filas_pase.empty %}
+        <strong>No hay habitaciones con salida para esta fecha.</strong>
+        {% elif total_bebidas > 0 %}
+        <strong>
+            Total confirmado de bebidas a cobrar:
+            $ {{ "%.2f"|format(total_bebidas) }}
+        </strong>
+        {% else %}
+        <strong>
+            No se registran bebidas confirmadas a cobrar en las salidas de hoy.
+        </strong>
+        {% endif %}
+
+        {% if not pendientes.empty or not inconsistencias.empty or not estadias_duplicadas.empty %}
+        <p>
+            Hay registros pendientes de revisión. No están incluidos en el importe a cobrar.
+        </p>
+        {% endif %}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>HAB</th>
+                <th>ESTADÍA</th>
+                <th>MAP</th>
+                <th>BEBIDAS</th>
+                <th>FORMA DE PAGO</th>
+                <th>TOTAL</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for _, fila in filas_pase.iterrows() %}
+            <tr>
+                <td>{{ fila['habitacion'] }}</td>
+                <td></td>
+                <td></td>
+                <td class="numero">
+                    $ {{ "%.2f"|format(fila['bebidas']) }}
+                </td>
+                <td></td>
+                <td class="numero total">
+                    $ {{ "%.2f"|format(fila['bebidas']) }}
+                    {% if fila['bebidas'] > 0 %}
+                    <span class="estado-fila estado-a-cobrar">A cobrar</span>
+                    {% else %}
+                    <span class="estado-fila estado-sin-deuda">Sin deuda de bebidas</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">
+                    No hay habitaciones con salida para esta fecha.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% if not filas_pase.empty %}
+        <tfoot>
+            <tr>
+                <td colspan="5" class="total">TOTAL BEBIDAS A COBRAR</td>
+                <td class="numero total">
+                    $ {{ "%.2f"|format(total_bebidas) }}
+                </td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+
+    <div class="respaldo">
+    <h2>Detalle de bebidas confirmadas</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Habitación</th>
+                <th>Pasajero</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Importe</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for _, consumo in detalle.iterrows() %}
+            <tr>
+                <td>{{ consumo.get('fecha', '') }}</td>
+                <td>{{ consumo.get('habitacion', '') }}</td>
+                <td>{{ consumo.get('pasajero', '') }}</td>
+                <td>{{ consumo.get('item', '') }}</td>
+                <td>{{ consumo.get('cantidad', '') }}</td>
+                <td class="numero">
+                    $ {{ consumo.get('monto', '') }}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No hay bebidas confirmadas.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Consumos pendientes de vinculación</h2>
+
+    {% if not pendientes.empty %}
+    <div class="aviso">
+        Hay consumos que requieren revisión. No están incluidos en los totales.
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Habitación</th>
+                <th>Pasajero</th>
+                <th>Producto</th>
+                <th>Importe</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, consumo in pendientes.iterrows() %}
+            <tr>
+                <td>{{ consumo.get('fecha', '') }}</td>
+                <td>{{ consumo.get('habitacion', '') }}</td>
+                <td>{{ consumo.get('pasajero', '') }}</td>
+                <td>{{ consumo.get('item', '') }}</td>
+                <td>$ {{ consumo.get('monto', '') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No hay consumos pendientes.</p>
+    {% endif %}
+
+    <h2>Inconsistencias</h2>
+
+    {% if not inconsistencias.empty %}
+    <div class="aviso">
+        Existen registros que requieren revisión y no fueron contabilizados.
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Habitación</th>
+                <th>Estadía</th>
+                <th>Producto</th>
+                <th>Importe</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, consumo in inconsistencias.iterrows() %}
+            <tr>
+                <td>{{ consumo.get('habitacion', '') }}</td>
+                <td>{{ consumo.get('id_estadia', '') }}</td>
+                <td>{{ consumo.get('item', '') }}</td>
+                <td>{{ consumo.get('monto', '') }}</td>
+                <td>{{ consumo.get('estado', '') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No hay inconsistencias detectadas.</p>
+    {% endif %}
+
+    <h2>Estadías con identificador duplicado</h2>
+
+    {% if not estadias_duplicadas.empty %}
+    <div class="aviso">
+        Hay identificadores de estadía repetidos en el padrón.
+        Sus consumos no se contabilizaron.
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Estadía</th>
+                <th>Habitación</th>
+                <th>Pasajero</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, estadia in estadias_duplicadas.iterrows() %}
+            <tr>
+                <td>{{ estadia['id_estadia'] }}</td>
+                <td>{{ estadia['Nro. habitación'] }}</td>
+                <td>{{ estadia['Apellido y nombre'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No hay identificadores duplicados.</p>
+    {% endif %}
+    </div>
+
+</div>
+</body>
+</html>

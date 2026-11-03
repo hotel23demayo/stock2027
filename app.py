@@ -8,7 +8,12 @@ from core.informe_consumos import generar_consolidado_productos
 
 
 # Importar módulos del core
-from core.dashboard import obtener_datos_dashboard, obtener_habitaciones_ocupadas, extraer_num_hab
+from core.dashboard import (
+    obtener_datos_dashboard,
+    obtener_habitaciones_ocupadas,
+    extraer_num_hab,
+    obtener_listado_pasajeros_alojados
+)
 from core.consumos import (
     obtener_resumen_habitacion,
     agregar_consumo,
@@ -20,6 +25,13 @@ from core.consumos import (
 )
 from core.reserva_express import crear_reserva_express, obtener_habitaciones_disponibles, validar_datos_reserva
 from core.identidad_estadias import procesar_identidades
+from core.pase_caja import (
+    leer_pasajeros,
+    leer_consumos,
+    obtener_pasajeros_con_salida,
+    vincular_consumos_bebidas,
+    consolidar_salidas_por_habitacion
+)
 
 app = Flask(__name__)
 app.secret_key = 'temporada_2026_recepcion_key_secreta'
@@ -135,7 +147,85 @@ def dashboard():
                          estadisticas=datos['estadisticas'],
                          checkouts_hoy=datos['checkouts_hoy'])
 
+@app.route('/pase-turno')
+def pase_turno():
+    """Informe de pase de turno de recepción."""
 
+    # Verificar que existan los archivos operativos.
+    if not os.path.exists(DB_PASAJEROS):
+        flash('No se encuentra el archivo de pasajeros.', 'warning')
+        return redirect('/dashboard')
+
+    if not os.path.exists(DB_CONSUMOS):
+        flash('No se encuentra el archivo de consumos.', 'warning')
+        return redirect('/dashboard')
+
+    # Leer los archivos sin modificar sus contenidos.
+    df_pasajeros = leer_pasajeros(DB_PASAJEROS)
+    df_consumos = leer_consumos(DB_CONSUMOS)
+
+    ahora = datetime.now()
+
+    # Identificar pasajeros con salida en la fecha de emisión.
+    salidas = obtener_pasajeros_con_salida(
+        df_pasajeros,
+        ahora.date()
+    )
+
+    # Vincular y calcular los consumos de bebidas.
+    resultado = vincular_consumos_bebidas(
+        salidas,
+        df_consumos
+    )
+    filas_pase = consolidar_salidas_por_habitacion(
+        salidas,
+        resultado['totales_por_estadia']
+    )
+    filas_por_pagina = 28
+    filas = filas_pase.to_dict('records')
+    paginas_pase = [
+        filas[inicio:inicio + filas_por_pagina]
+        for inicio in range(0, len(filas), filas_por_pagina)
+    ] or [[]]
+
+    for pagina in paginas_pase:
+        pagina.extend(
+        {
+            'habitacion': '',
+            'titular': '',
+            'bebidas': None
+        }
+        for _ in range(filas_por_pagina - len(pagina))
+    )
+
+    return render_template(
+        'pase_turno.html',
+        filas_pase=filas_pase,
+        paginas_pase=paginas_pase,
+        total_bebidas=filas_pase['bebidas'].sum(),
+        detalle=resultado['detalle_confirmado'],
+        pendientes=resultado['pendientes'],
+        inconsistencias=resultado['inconsistencias'],
+        estadias_duplicadas=resultado['estadias_duplicadas'],
+        fecha_emision=ahora.strftime('%d/%m/%Y'),
+    )
+
+@app.route('/listado-pasajeros-alojados')
+def listado_pasajeros_alojados():
+    """Muestra el listado actualizado de pasajeros alojados."""
+
+    datos = obtener_listado_pasajeros_alojados(DB_PASAJEROS)
+
+    ahora = datetime.now()
+
+    return render_template(
+        'listado_pasajeros_alojados.html',
+        habitaciones=datos['habitaciones'],
+        total_habitaciones=datos['total_habitaciones'],
+        total_pasajeros=datos['total_pasajeros'],
+        fecha_emision=ahora.strftime('%d/%m/%Y'),
+        hora_emision=ahora.strftime('%H:%M')
+    )
 
 @app.route('/habitacion/<int:num_habitacion>')
 def ficha_habitacion(num_habitacion):

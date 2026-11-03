@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listado de pasajeros alojados</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            color: #202833;
+            background: #eef1f4;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+        }
+
+        .pagina {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 28px;
+            background: #fff;
+            border: 1px solid #d9dee5;
+            border-radius: 8px;
+        }
+
+        .encabezado {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            padding-bottom: 18px;
+            border-bottom: 2px solid #263746;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            color: #263746;
+            font-size: 23px;
+            letter-spacing: .5px;
+        }
+
+        .subtitulo {
+            margin: 0;
+            color: #66717d;
+            font-size: 12px;
+        }
+
+        .emision {
+            text-align: right;
+            color: #4d5965;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: nowrap;
+        }
+
+        .resumen {
+            display: flex;
+            gap: 12px;
+            margin: 18px 0 22px;
+        }
+
+        .indicador {
+            min-width: 150px;
+            padding: 10px 14px;
+            border: 1px solid #dce2e8;
+            border-radius: 6px;
+            background: #f7f9fb;
+        }
+
+        .indicador strong {
+            display: block;
+            color: #263746;
+            font-size: 21px;
+        }
+
+        .indicador span {
+            color: #66717d;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+        }
+
+        .habitacion {
+            margin: 0 0 13px;
+            border: 1px solid #d8dee5;
+            border-radius: 5px;
+            overflow: hidden;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .habitacion-cabecera {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 11px;
+            color: #263746;
+            background: #edf2f6;
+            border-bottom: 1px solid #d8dee5;
+        }
+
+        .habitacion-cabecera strong {
+            font-size: 14px;
+        }
+
+        .habitacion-cabecera span {
+            color: #596675;
+            font-size: 11px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 7px 9px;
+            border-bottom: 1px solid #e8ecf0;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            color: #596675;
+            background: #fafbfc;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .35px;
+        }
+
+        td {
+            font-size: 12px;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .col-nombre {
+            width: 38%;
+            font-weight: 600;
+        }
+
+        .col-documento {
+            width: 25%;
+        }
+
+        .col-fecha {
+            width: 18.5%;
+            white-space: nowrap;
+        }
+
+        .vacio {
+            padding: 30px 15px;
+            color: #66717d;
+            text-align: center;
+            border: 1px dashed #cbd3dc;
+            border-radius: 6px;
+        }
+
+        .acciones {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 0 auto 18px;
+        }
+
+        .acciones a, .acciones button {
+            display: inline-block;
+            padding: 10px 16px;
+            border: 0;
+            border-radius: 5px;
+            color: #fff;
+            background: #34495e;
+            font-size: 13px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .acciones button {
+            background: #198754;
+        }
+
+        .pie {
+            margin-top: 18px;
+            padding-top: 9px;
+            border-top: 1px solid #dce2e8;
+            color: #7a8490;
+            font-size: 10px;
+            text-align: center;
+        }
+
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+                background: #fff;
+                font-size: 10px;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+
+            .pagina {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                border-radius: 0;
+            }
+
+            .acciones {
+                display: none !important;
+            }
+
+            h1 {
+                font-size: 17px;
+            }
+
+            .encabezado {
+                padding-bottom: 10px;
+            }
+
+            .resumen {
+                gap: 8px;
+                margin: 10px 0 13px;
+            }
+
+            .indicador {
+                min-width: 120px;
+                padding: 6px 9px;
+            }
+
+            .indicador strong {
+                font-size: 16px;
+            }
+
+            .habitacion {
+                margin-bottom: 7px;
+            }
+
+            .habitacion-cabecera {
+                padding: 5px 8px;
+            }
+
+            th, td {
+                padding: 4px 6px;
+            }
+
+            th {
+                font-size: 8px;
+            }
+
+            td {
+                font-size: 9px;
+            }
+
+            .pie {
+                margin-top: 10px;
+                padding-top: 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="acciones">
+        <a href="{{ url_for('dashboard') }}">Volver al dashboard</a>
+        <button type="button" onclick="window.print()">Imprimir listado</button>
+    </div>
+
+    <main class="pagina">
+        <header class="encabezado">
+            <div>
+                <h1>LISTADO DE PASAJEROS ALOJADOS</h1>
+                <p class="subtitulo">Ocupación actual del hotel</p>
+            </div>
+            <div class="emision">
+                <div><strong>Fecha:</strong> {{ fecha_emision }}</div>
+                <div><strong>Hora:</strong> {{ hora_emision }}</div>
+            </div>
+        </header>
+
+        <section class="resumen">
+            <div class="indicador">
+                <strong>{{ total_habitaciones }}</strong>
+                <span>Habitaciones ocupadas</span>
+            </div>
+            <div class="indicador">
+                <strong>{{ total_pasajeros }}</strong>
+                <span>Pasajeros alojados</span>
+            </div>
+        </section>
+
+        {% if habitaciones %}
+            {% for habitacion in habitaciones %}
+                <section class="habitacion">
+                    <div class="habitacion-cabecera">
+                        <strong>HABITACIÓN {{ habitacion.numero }}</strong>
+                        <span>{{ habitacion.pasajeros|length }} pasajero(s)</span>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-nombre">Apellido y nombre</th>
+                                <th class="col-documento">Documento</th>
+                                <th class="col-fecha">Ingreso</th>
+                                <th class="col-fecha">Egreso</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pasajero in habitacion.pasajeros %}
+                                <tr>
+                                    <td class="col-nombre">{{ pasajero.nombre }}</td>
+                                    <td class="col-documento">{{ pasajero.documento or '—' }}</td>
+                                    <td class="col-fecha">{{ pasajero.ingreso }}</td>
+                                    <td class="col-fecha">{{ pasajero.egreso }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </section>
+            {% endfor %}
+        {% else %}
+            <div class="vacio">
+                No hay pasajeros alojados para la fecha actual.
+            </div>
+        {% endif %}
+
+        <footer class="pie">
+            Listado generado desde los datos actuales de pasajeros. La información se actualiza al volver a abrir esta página.
+        </footer>
+    </main>
+</body>
+</html>

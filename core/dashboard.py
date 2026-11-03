@@ -152,6 +152,114 @@ def obtener_habitaciones_ocupadas(archivo_pasajeros='data/pasajeros.csv'):
     return habitaciones_ocupadas
 
 
+def obtener_listado_pasajeros_alojados(
+    archivo_pasajeros='data/pasajeros.csv',
+    fecha_referencia=None
+):
+    """
+    Obtiene todos los pasajeros alojados en una fecha determinada.
+    Agrupa por habitación y excluye registros con fechas inválidas.
+    No modifica el CSV original.
+    """
+    if fecha_referencia is None:
+        fecha_referencia = datetime.today().date()
+
+    resultado_vacio = {
+        'habitaciones': [],
+        'total_habitaciones': 0,
+        'total_pasajeros': 0
+    }
+
+    if not os.path.exists(archivo_pasajeros):
+        return resultado_vacio
+
+    try:
+        df = pd.read_csv(
+            archivo_pasajeros,
+            dtype=str,
+            keep_default_na=False
+        )
+    except (EmptyDataError, pd.errors.ParserError, OSError):
+        return resultado_vacio
+
+    columnas = [
+        'Nro. habitación',
+        'Fecha de ingreso',
+        'Fecha de egreso',
+        'Apellido y nombre'
+    ]
+
+    if not all(col in df.columns for col in columnas):
+        return resultado_vacio
+
+    habitaciones = {}
+
+    for _, fila in df.iterrows():
+        try:
+            ingreso = datetime.strptime(
+                fila['Fecha de ingreso'].strip(),
+                '%d/%m/%Y'
+            ).date()
+
+            egreso = datetime.strptime(
+                fila['Fecha de egreso'].strip(),
+                '%d/%m/%Y'
+            ).date()
+        except (ValueError, TypeError):
+            continue
+
+        if not ingreso <= fecha_referencia <= egreso:
+            continue
+
+        numero = extraer_num_hab(fila['Nro. habitación'])
+
+        if numero is None:
+            continue
+
+        nombre = fila['Apellido y nombre'].strip()
+
+        if not nombre:
+            continue
+
+        tipo_doc = fila.get('Tipo documento', '').strip()
+        nro_doc = fila.get('Nro. doc.', '').strip()
+
+        documento = ' '.join(
+            parte for parte in (tipo_doc, nro_doc) if parte
+        )
+
+        pasajero = {
+            'nombre': nombre,
+            'documento': documento,
+            'ingreso': ingreso.strftime('%d/%m/%Y'),
+            'egreso': egreso.strftime('%d/%m/%Y')
+        }
+
+        habitaciones.setdefault(numero, []).append(pasajero)
+
+    listado = []
+
+    for numero in sorted(habitaciones):
+        pasajeros = sorted(
+            habitaciones[numero],
+            key=lambda p: p['nombre'].casefold()
+        )
+
+        listado.append({
+            'numero': numero,
+            'cantidad': len(pasajeros),
+            'pasajeros': pasajeros
+        })
+
+    return {
+        'habitaciones': listado,
+        'total_habitaciones': len(listado),
+        'total_pasajeros': sum(
+            h['cantidad'] for h in listado
+        )
+    }
+
+
 def obtener_todos_pasajeros_habitacion(num_habitacion, archivo_pasajeros='data/pasajeros.csv'):
     """
     Obtiene TODOS los pasajeros de una habitación específica con sus datos individuales.
