@@ -1,2 +1,22 @@
 codigo,producto,categoria,sector,precio_actual
+coca,Coca,gaseosas,Bar,3500
+coca_0,Coca 0,gaseosas,Bar,3500
+sprite,Sprite,gaseosas,Bar,3500
+fanta,Fanta,gaseosas,Bar,3500
+tonica,Tónica,gaseosas,Bar,3500
+agua_sin_gas,Agua sin gas,aguas,Bar,2000
+agua_con_gas,Agua con gas,aguas,Bar,2000
+saborizada_manzana,Saborizada Manzana,aguas_saborizadas,Bar,3600
+saborizada_pomelo,Saborizada Pomelo,aguas_saborizadas,Bar,3600
+schweppes,Schweppes,gaseosas,Bar,3500
+cerveza_rubia,Cerveza Rubia,cervezas,Bar,5500
+cerveza_negra,Cerveza Negra,cervezas,Bar,5500
+cerveza_roja,Cerveza Roja,cervezas,Bar,5500
 nampe_malbec,Nampe Malbec,vinos,Bar,6500
+chacabuco_chenin,Chacabuco Chenin,vinos,Bar,10000
+chacabuco_malbec,Chacabuco Malbec,vinos,Bar,7800
+los_haroldos_reserva_malbec,Los Haroldos Reserva Malbec,vinos,Bar,14800
+los_haroldos_reserva_chardonnay,Los Haroldos Reserva Chardonnay,vinos,Bar,14800
+los_haroldos_estate_malbec,Los Haroldos Estate Malbec,vinos,Bar,11000
+los_haroldos_estate_chardonnay,Los Haroldos Estate Chardonnay,vinos,Bar,11000
+ficha_cafe,Ficha de café,cafeteria,Bar,3000
