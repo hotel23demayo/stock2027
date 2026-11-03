@@ -29,7 +29,8 @@ from core.pase_caja import (
     leer_pasajeros,
     leer_consumos,
     obtener_pasajeros_con_salida,
-    vincular_consumos_bebidas
+    vincular_consumos_bebidas,
+    consolidar_salidas_por_habitacion
 )
 
 app = Flask(__name__)
@@ -163,25 +164,50 @@ def pase_turno():
     df_pasajeros = leer_pasajeros(DB_PASAJEROS)
     df_consumos = leer_consumos(DB_CONSUMOS)
 
-    # Identificar pasajeros con salida hoy.
-    salidas = obtener_pasajeros_con_salida(df_pasajeros)
+    ahora = datetime.now()
+
+    # Identificar pasajeros con salida en la fecha de emisión.
+    salidas = obtener_pasajeros_con_salida(
+        df_pasajeros,
+        ahora.date()
+    )
 
     # Vincular y calcular los consumos de bebidas.
     resultado = vincular_consumos_bebidas(
         salidas,
         df_consumos
     )
+    filas_pase = consolidar_salidas_por_habitacion(
+        salidas,
+        resultado['totales_por_estadia']
+    )
+    filas_por_pagina = 28
+    filas = filas_pase.to_dict('records')
+    paginas_pase = [
+        filas[inicio:inicio + filas_por_pagina]
+        for inicio in range(0, len(filas), filas_por_pagina)
+    ] or [[]]
+
+    for pagina in paginas_pase:
+        pagina.extend(
+        {
+            'habitacion': '',
+            'titular': '',
+            'bebidas': None
+        }
+        for _ in range(filas_por_pagina - len(pagina))
+    )
 
     return render_template(
         'pase_turno.html',
-        salidas=salidas,
-        totales=resultado['totales_por_estadia'],
+        filas_pase=filas_pase,
+        paginas_pase=paginas_pase,
+        total_bebidas=filas_pase['bebidas'].sum(),
         detalle=resultado['detalle_confirmado'],
         pendientes=resultado['pendientes'],
         inconsistencias=resultado['inconsistencias'],
         estadias_duplicadas=resultado['estadias_duplicadas'],
-        fecha_emision=datetime.now().strftime('%d/%m/%Y'),
-        hora_emision=datetime.now().strftime('%H:%M')
+        fecha_emision=ahora.strftime('%d/%m/%Y'),
     )
 
 @app.route('/listado-pasajeros-alojados')

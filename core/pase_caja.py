@@ -262,3 +262,55 @@ def vincular_consumos_bebidas(df_salidas, df_consumos):
         'inconsistencias': pd.DataFrame(inconsistencias),
         'estadias_duplicadas': estadias_duplicadas
     }
+
+
+def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
+    """
+    Consolida las salidas por habitación y voucher.
+
+    El primer pasajero encontrado en cada grupo se utiliza
+    como titular, respetando el orden original del CSV.
+
+    Los consumos se suman por id_estadia.
+    """
+
+    filas = {}
+
+    for _, estadia in df_salidas.iterrows():
+
+        habitacion = str(
+            estadia.get('Nro. habitación', '')
+        ).strip()
+
+        voucher = str(
+            estadia.get('Voucher', '')
+        ).strip()
+
+        titular = str(
+            estadia.get('Apellido y nombre', '')
+        ).strip()
+
+        clave = (habitacion, voucher)
+
+        fila = filas.setdefault(
+            clave,
+            {
+                'habitacion': habitacion,
+                'titular': titular,
+                'bebidas': 0.0
+            }
+        )
+
+        id_estadia = str(
+            estadia.get('id_estadia', '')
+        ).strip()
+
+        fila['bebidas'] += totales_por_estadia.get(
+            id_estadia,
+            0.0
+        )
+
+    return pd.DataFrame(
+        filas.values(),
+        columns=['habitacion', 'titular', 'bebidas']
+    )

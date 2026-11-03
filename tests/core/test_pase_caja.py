@@ -6,7 +6,10 @@ from pathlib import Path
 import pandas as pd
 from core.pase_caja import obtener_pasajeros_con_salida
 from core.pase_caja import leer_pasajeros, leer_consumos
-from core.pase_caja import vincular_consumos_bebidas
+from core.pase_caja import (
+    vincular_consumos_bebidas,
+    consolidar_salidas_por_habitacion
+)
 
 
 class TestLecturaPaseCaja(unittest.TestCase):
@@ -17,6 +20,74 @@ class TestLecturaPaseCaja(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_consolidar_salidas_por_habitacion_y_voucher(self):
+        salidas = pd.DataFrame([
+            {
+                'id_estadia': 'EST-001',
+                'Nro. habitación': '117',
+                'Apellido y nombre': 'GOMEZ JUAN',
+                'Voucher': 'V001'
+            },
+            {
+                'id_estadia': 'EST-002',
+                'Nro. habitación': '117',
+                'Apellido y nombre': 'PEREZ MARIA',
+                'Voucher': 'V002'
+            },
+            {
+                'id_estadia': 'EST-003',
+                'Nro. habitación': '118',
+                'Apellido y nombre': 'DE LA TORRE ANA',
+                'Voucher': 'V003'
+            },
+            {
+                'id_estadia': 'EST-004',
+                'Nro. habitación': '118',
+                'Apellido y nombre': 'TORRES CARLOS',
+                'Voucher': 'V003'
+            },
+            {
+                'id_estadia': 'EST-005',
+                'Nro. habitación': '119',
+                'Apellido y nombre': 'LOPEZ MARTA',
+                'Voucher': 'V001'
+            }
+        ])
+
+        totales = {
+            'EST-001': 1500.0,
+            'EST-002': 2500.0,
+            'EST-003': 1000.0,
+            'EST-004': 2000.0,
+            'EST-005': 500.0
+        }
+
+        filas = consolidar_salidas_por_habitacion(
+            salidas,
+            totales
+        )
+
+        self.assertEqual(len(filas), 4)
+
+        # Dos vouchers diferentes en habitación 117.
+        self.assertEqual(filas.iloc[0]['habitacion'], '117')
+        self.assertEqual(filas.iloc[0]['titular'], 'GOMEZ JUAN')
+        self.assertEqual(filas.iloc[0]['bebidas'], 1500.0)
+
+        self.assertEqual(filas.iloc[1]['habitacion'], '117')
+        self.assertEqual(filas.iloc[1]['titular'], 'PEREZ MARIA')
+        self.assertEqual(filas.iloc[1]['bebidas'], 2500.0)
+
+        # Dos pasajeros que comparten el voucher V003.
+        self.assertEqual(filas.iloc[2]['habitacion'], '118')
+        self.assertEqual(filas.iloc[2]['titular'], 'DE LA TORRE ANA')
+        self.assertEqual(filas.iloc[2]['bebidas'], 3000.0)
+
+        # El mismo voucher en otra habitación es otra cuenta.
+        self.assertEqual(filas.iloc[3]['habitacion'], '119')
+        self.assertEqual(filas.iloc[3]['titular'], 'LOPEZ MARTA')
+        self.assertEqual(filas.iloc[3]['bebidas'], 500.0)
 
 
     def test_leer_pasajeros(self):
