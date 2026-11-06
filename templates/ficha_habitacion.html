@@ -357,6 +357,13 @@
                 📊 Consumos Registrados ({{ habitacion.cantidad_consumos }})
             </div>
 
+            {% if habitacion.cantidad_consumos_sin_estadia %}
+            <div class="alert alert-warning">
+                Hay {{ habitacion.cantidad_consumos_sin_estadia }} consumo(s) histórico(s) de esta habitación sin ID de estadía.
+                Se conservan en el historial y no se incluyen en la cuenta actual.
+            </div>
+            {% endif %}
+
             {% if habitacion.consumos %}
                 {% if habitacion.tiene_vouchers_separados and habitacion.consumos_por_pasajero %}
                 <!-- Vista de consumos SEPARADOS por pasajero -->

@@ -32,17 +32,27 @@ Archivo para registrar consumos de los pasajeros.
 
 **Estructura:**
 ```csv
-fecha,habitacion,pasajero,categoria,monto
+id_consumo,id_estadia,fecha,habitacion,pasajero,categoria,item,cantidad,precio_unitario,monto,estado,fecha_anulacion,motivo_anulacion
 ```
 
-**Ejemplo:**
+- `id_estadia` identifica la **cuenta de consumos**; el número de habitación es solo la ubicación física.
+- Un consumo sin `id_estadia` (histórico) **no se suma** a la cuenta de una estadía nueva; se conserva en el CSV y la ficha muestra una advertencia.
+- Anular un consumo no lo borra: se marca `estado=anulado` con fecha y motivo.
+- El checkout no elimina consumos: el historial es permanente.
+- Las columnas faltantes en archivos viejos se migran automáticamente al leer.
+
+**Para empezar de cero** (p. ej. tras las pruebas) usar el script de reinicio, que hace backup antes de vaciar: ver [REINICIO_DATOS.md](../REINICIO_DATOS.md).
+
+---
+
+### 2️⃣ bis `catalogo_productos.csv`
+
+Catálogo de productos y precios. **Sí está versionado en Git** y no es dato operativo: el reinicio no lo modifica.
+
 ```csv
-fecha,habitacion,pasajero,categoria,monto
-01/03/2026,101,Juan Pérez,Bebidas,$500.00
-01/03/2026,102,María López,Estadía extra,$1200.00
+codigo,producto,categoria,sector,precio_actual
+nampe_malbec,Nampe Malbec,vinos,Bar,6500
 ```
-
-**Se resetea al inicio de cada temporada.**
 
 ---
 
@@ -94,9 +104,10 @@ data/
 
 2. **Crear archivos iniciales:**
    ```bash
-   # Crear consumos vacío
-   echo "fecha,habitacion,pasajero,categoria,monto" > data/consumos_diarios.csv
-   
+   # Crear consumos vacío (se genera con el encabezado correcto)
+   python3 reiniciar_datos.py --simular   # ver qué haría
+   python3 reiniciar_datos.py             # reiniciar con backup
+
    # Copiar tu CSV de pasajeros
    cp /ruta/a/tu/archivo.csv data/pasajeros.csv
    ```
@@ -153,6 +164,9 @@ Los backups se crean automáticamente en `data/backups/` cuando:
 ```
 pasajeros_backup_20260301_183045.csv
 consumos_backup_20260301_183045.csv
+reinicio_20261107_093000/        # generado por reiniciar_datos.py
+├── pasajeros.csv
+└── consumos_diarios.csv
 ```
 
 ---
@@ -167,4 +181,4 @@ consumos_backup_20260301_183045.csv
 
 ---
 
-**Última actualización:** 1 de Marzo 2026
+**Última actualización:** 3 de Noviembre 2026

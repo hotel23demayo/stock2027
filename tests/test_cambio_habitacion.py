@@ -42,6 +42,7 @@ class TestCambioHabitacion(unittest.TestCase):
         pd.DataFrame([
             {
                 "id_consumo": 1,
+                "id_estadia": "ESTADIA-A",
                 "habitacion": 101,
                 "pasajero": "HUESPED A",
                 "producto": "AGUA",
@@ -50,9 +51,27 @@ class TestCambioHabitacion(unittest.TestCase):
             },
             {
                 "id_consumo": 2,
+                "id_estadia": "ESTADIA-B",
                 "habitacion": 101,
                 "pasajero": "HUESPED B",
                 "producto": "GASEOSA",
+                "cantidad": 1,
+                "estado": "Activo",
+            },
+            {
+                "id_consumo": 3,
+                "id_estadia": "ESTADIA-A-ANTERIOR",
+                "habitacion": 101,
+                "pasajero": "HUESPED A",
+                "producto": "VINO HISTÓRICO",
+                "cantidad": 1,
+                "estado": "Activo",
+            },
+            {
+                "id_consumo": 4,
+                "habitacion": 101,
+                "pasajero": "HUÉSPED LEGADO",
+                "producto": "CONSUMO SIN ID",
                 "cantidad": 1,
                 "estado": "Activo",
             },
@@ -122,24 +141,24 @@ class TestCambioHabitacion(unittest.TestCase):
         # Los dos consumos deben trasladarse a la habitación 105.
         self.assertEqual(
             consumos["habitacion"].tolist(),
-            [105, 105],
+            [105, 105, 101, 101],
         )
 
         # Deben conservarse identificadores y cantidades.
         self.assertEqual(
             consumos["id_consumo"].tolist(),
-            [1, 2],
+            [1, 2, 3, 4],
         )
 
         self.assertEqual(
             consumos["cantidad"].tolist(),
-            [2, 1],
+            [2, 1, 1, 1],
         )
 
         # También deben conservarse los estados.
         self.assertEqual(
             consumos["estado"].tolist(),
-            ["Activo", "Activo"],
+            ["Activo", "Activo", "Activo", "Activo"],
         )
 
     def test_no_permite_trasladar_a_habitacion_ocupada(self):
@@ -241,11 +260,13 @@ class TestCambioHabitacion(unittest.TestCase):
 
         # Solamente los consumos de HUESPED A deben trasladarse.
         consumo_a = consumos[
-            consumos["pasajero"] == "HUESPED A"
+            consumos["id_estadia"] == "ESTADIA-A"
         ]
-
         consumo_b = consumos[
-            consumos["pasajero"] == "HUESPED B"
+            consumos["id_estadia"] == "ESTADIA-B"
+        ]
+        consumo_a_anterior = consumos[
+            consumos["id_estadia"] == "ESTADIA-A-ANTERIOR"
         ]
 
         self.assertEqual(
@@ -257,16 +278,27 @@ class TestCambioHabitacion(unittest.TestCase):
             consumo_b.iloc[0]["habitacion"],
             101,
         )
+        self.assertEqual(
+            consumo_a_anterior.iloc[0]["habitacion"],
+            101,
+        )
+        self.assertEqual(
+            consumos.loc[
+                consumos["id_consumo"] == 4,
+                "habitacion",
+            ].iloc[0],
+            101,
+        )
 
         # Los identificadores y cantidades deben conservarse.
         self.assertEqual(
             consumos["id_consumo"].tolist(),
-            [1, 2],
+            [1, 2, 3, 4],
         )
 
         self.assertEqual(
             consumos["cantidad"].tolist(),
-            [2, 1],
+            [2, 1, 1, 1],
         )
     def test_cambio_parcial_a_habitacion_ocupada_con_cupo(self):
 
@@ -357,6 +389,17 @@ class TestCambioHabitacion(unittest.TestCase):
         self.assertEqual(
             consumo_a.iloc[0]["habitacion"],
             105,
+        )
+        self.assertEqual(
+            consumo_a.iloc[1]["habitacion"],
+            101,
+        )
+        self.assertEqual(
+            consumos_despues.loc[
+                consumos_despues["id_consumo"] == 4,
+                "habitacion",
+            ].iloc[0],
+            101,
         )
 if __name__ == "__main__":
     unittest.main()

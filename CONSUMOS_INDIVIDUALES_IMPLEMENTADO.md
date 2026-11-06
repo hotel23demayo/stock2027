@@ -178,6 +178,15 @@ Esta lógica se aplica en:
 ### testJubis.csv (Trabajadores Pasivos/Jubilados)
 - Voucher único por persona/familia
 - Solo comparten voucher matrimonios/familiares
+
+---
+
+## Aislamiento de consumos por estadía
+
+- La ficha, los totales de cuenta y el check-out filtran por los `id_estadia` de los pasajeros activos, no solo por el número físico de habitación.
+- Como cada pasajero puede tener su propio `id_estadia`, una cuenta de habitación puede filtrar por el conjunto de IDs de sus ocupantes actuales.
+- Los consumos históricos sin `id_estadia` no se asignan automáticamente: permanecen en el CSV y en los informes históricos, se excluyen de la cuenta actual y se indican en la ficha.
+- Los cambios de habitación actualizan únicamente consumos vinculados por `id_estadia`; los registros sin identidad permanecen intactos.
 - **Sistema detecta automáticamente vouchers diferentes**
 - Consumos separados por default
 
