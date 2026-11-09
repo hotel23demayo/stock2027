@@ -154,8 +154,9 @@
             }
 
             .planilla-pagina {
-                height: 273mm;
-                overflow: hidden;
+                min-height: 273mm;
+                box-sizing: border-box;
+                overflow: visible;
                 page-break-after: always;
                 break-after: page;
             }
@@ -206,8 +207,10 @@
             .planilla-tabla th,
             .planilla-tabla td {
                 box-sizing: border-box;
-                height: 7mm;
-                padding: 0 1.5mm;
+                min-height: 7mm;
+                height: auto;
+                padding: 1.5mm;
+                vertical-align: middle;
                 border: 1px solid #222;
             }
 
@@ -216,21 +219,54 @@
                 text-align: center;
             }
 
-            .planilla-tabla .col-hab { width: 10%; }
-            .planilla-tabla .col-titular { width: 24%; }
-            .planilla-tabla .col-estadia { width: 17%; }
-            .planilla-tabla .col-map { width: 13%; }
-            .planilla-tabla .col-bebidas { width: 13%; }
+            /* Anchos equilibrados para aprovechar el A4 */
+            .planilla-tabla .col-hab { width: 7%; }
+            .planilla-tabla .col-titular { width: 32%; }
+            .planilla-tabla .col-estadia { width: 8%; }
+            .planilla-tabla .col-map { width: 8%; }
+            .planilla-tabla .col-bebidas { width: 15%; }
             .planilla-tabla .col-pago { width: 13%; }
-            .planilla-tabla .col-total { width: 10%; }
+            .planilla-tabla .col-total { width: 17%; }
 
-            .planilla-tabla .col-hab {
+            .planilla-tabla .col-hab,
+            .planilla-tabla .col-estadia,
+            .planilla-tabla .col-map {
                 text-align: center;
             }
 
             .planilla-tabla .col-titular {
                 text-align: left;
-                overflow-wrap: anywhere;
+                white-space: normal;
+                overflow-wrap: break-word;
+                word-break: normal;
+                line-height: 1.2;
+            }
+
+            .planilla-tabla .col-bebidas,
+            .planilla-tabla .col-total {
+                text-align: center;
+                white-space: nowrap;
+                font-size: 10pt;
+
+                padding-left: 1mm;
+                padding-right: 1mm;
+            }
+
+            .planilla-tabla th.col-bebidas,
+            .planilla-tabla th.col-total {
+                text-align: center;
+                white-space: normal;
+                font-size: 9pt;
+            }
+
+            .planilla-tabla td.col-total {
+                font-size: 12pt;
+                font-weight: bold;
+                font-weight: 800;
+                background: #fff2cc;
+                color: #000;
+                text-align: center;
+                white-space: nowrap;
             }
 
             .planilla-tabla tr {
@@ -276,7 +312,7 @@
                 <thead>
                     <tr>
                     <th class="col-hab">HAB</th>
-                    <th class="col-titular">TITULAR</th>
+                    <th class="col-titular">PASAJERO</th>
                     <th class="col-estadia">Estadía</th>
                     <th class="col-map">MAP</th>
                     <th class="col-bebidas">Bebidas</th>
@@ -291,15 +327,15 @@
                         <td class="col-titular">{{ fila['titular'] }}</td>
                         <td></td>
                         <td></td>
-                        <td class="importe">
+                        <td class="col-bebidas importe">
                             {% if fila['bebidas'] is not none %}
-                            $ {{ "%.2f"|format(fila['bebidas']) }}
+                            $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
                             {% endif %}
                         </td>
                         <td></td>
-                        <td class="importe">
+                        <td class="col-total importe">
                             {% if fila['bebidas'] is not none %}
-                            $ {{ "%.2f"|format(fila['bebidas']) }}
+                            $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
                             {% endif %}
                         </td>
                     </tr>
@@ -318,7 +354,7 @@
         {% elif total_bebidas > 0 %}
         <strong>
             Total confirmado de bebidas a cobrar:
-            $ {{ "%.2f"|format(total_bebidas) }}
+            $ {{ "{:,.0f}".format(total_bebidas).replace(',', '.') }}
         </strong>
         {% else %}
         <strong>
@@ -352,11 +388,11 @@
                 <td></td>
                 <td></td>
                 <td class="numero">
-                    $ {{ "%.2f"|format(fila['bebidas']) }}
+                    $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
                 </td>
                 <td></td>
                 <td class="numero total">
-                    $ {{ "%.2f"|format(fila['bebidas']) }}
+                    $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
                     {% if fila['bebidas'] > 0 %}
                     <span class="estado-fila estado-a-cobrar">A cobrar</span>
                     {% else %}
@@ -377,7 +413,7 @@
             <tr>
                 <td colspan="5" class="total">TOTAL BEBIDAS A COBRAR</td>
                 <td class="numero total">
-                    $ {{ "%.2f"|format(total_bebidas) }}
+                    $ {{ "{:,.0f}".format(total_bebidas).replace(',', '.') }}
                 </td>
             </tr>
         </tfoot>

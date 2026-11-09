@@ -310,7 +310,17 @@ def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
             0.0
         )
 
-    return pd.DataFrame(
-        filas.values(),
-        columns=['habitacion', 'titular', 'bebidas']
+    return (
+     pd.DataFrame(
+         filas.values(),
+         columns=['habitacion', 'titular', 'bebidas']
     )
+     .sort_values(
+         by='habitacion',
+         key=lambda columna:
+     pd.to_numeric(columna, errors='coerce'),
+       kind='stable',
+       na_position='last'
+    )
+    .reset_index(drop=True)
+)
