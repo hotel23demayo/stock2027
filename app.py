@@ -1314,6 +1314,11 @@ def bebidas_rapidas():
     )
 
 
+def formatear_periodo_consumos(desde, hasta):
+    inicio = desde.strftime('%d/%m/%Y')
+    return inicio if desde.date() == hasta.date() else f"{inicio} al {hasta.strftime('%d/%m/%Y')}"
+
+
 @app.route('/informe-consumos', methods=['GET', 'POST'])
 def informe_consumos():
     """Consulta el consolidado de productos consumidos por período."""
@@ -1324,6 +1329,7 @@ def informe_consumos():
 
     resultado = None
     error = None
+    periodo = None
 
     if request.method == 'POST':
         try:
@@ -1337,6 +1343,7 @@ def informe_consumos():
                 hasta.strftime('%d/%m/%Y'),
                 DB_CONSUMOS,
             )
+            periodo = formatear_periodo_consumos(desde, hasta)
 
         except (ValueError, TypeError) as exc:
             error = str(exc)
@@ -1347,6 +1354,7 @@ def informe_consumos():
         fecha_hasta=fecha_hasta,
         resultado=resultado,
         error=error,
+        periodo=periodo,
     )
 
 @app.route('/informe-consumos-xlsx', methods=['POST'])
@@ -1354,7 +1362,6 @@ def exportar_informe_consumos_xlsx():
     """Exporta a Excel el consolidado de productos del período seleccionado."""
 
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
 
     fecha_desde = request.form.get('fecha_desde', '').strip()
     fecha_hasta = request.form.get('fecha_hasta', '').strip()
@@ -1373,12 +1380,12 @@ def exportar_informe_consumos_xlsx():
             archivo_salida = tmp.name
 
         with pd.ExcelWriter(archivo_salida, engine='openpyxl') as writer:
-            detalle = resultado['detalle'].copy()
+            detalle = resultado['detalle'][['Producto', 'Unidades']].copy()
             detalle.to_excel(writer, sheet_name='Informe de consumos', index=False, startrow=4)
 
             hoja = writer.sheets['Informe de consumos']
             hoja['A1'] = 'INFORME CONSOLIDADO DE CONSUMOS'
-            hoja['A2'] = f"Período: {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+            hoja['A2'] = f"Período: {formatear_periodo_consumos(desde, hasta)}"
             hoja['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 
             fila_encabezado = 5
@@ -1386,9 +1393,8 @@ def exportar_informe_consumos_xlsx():
 
             hoja.cell(row=fila_total, column=1, value='TOTAL GENERAL')
             hoja.cell(row=fila_total, column=2, value=resultado['total_unidades'])
-            hoja.cell(row=fila_total, column=3, value=resultado['total_importe'])
 
-            hoja.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+            hoja.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
             hoja['A1'].font = Font(bold=True, size=16, color='FFFFFF')
             hoja['A1'].fill = PatternFill('solid', fgColor='245B78')
             hoja['A1'].alignment = Alignment(horizontal='center')
@@ -1400,7 +1406,6 @@ def exportar_informe_consumos_xlsx():
 
             for fila in range(fila_encabezado + 1, fila_total + 1):
                 hoja.cell(row=fila, column=2).number_format = '#,##0.##'
-                hoja.cell(row=fila, column=3).number_format = '$ #,##0.00'
 
             for celda in hoja[fila_total]:
                 celda.font = Font(bold=True)
@@ -1408,9 +1413,8 @@ def exportar_informe_consumos_xlsx():
 
             hoja.column_dimensions['A'].width = 38
             hoja.column_dimensions['B'].width = 16
-            hoja.column_dimensions['C'].width = 22
             hoja.freeze_panes = 'A6'
-            hoja.auto_filter.ref = f'A5:C{fila_encabezado + len(detalle)}'
+            hoja.auto_filter.ref = f'A5:B{fila_encabezado + len(detalle)}'
 
         nombre_archivo = (
             f"informe_consumos_{desde.strftime('%d-%m-%Y')}_"

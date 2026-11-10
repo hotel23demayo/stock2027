@@ -351,7 +351,7 @@ Todas las exportaciones utilizan archivos temporales que:
 
 **4. Informe de Consumos (XLSX)**
 - Ruta: `/informe-consumos` (pantalla) y `/informe-consumos-xlsx` (descarga)
-- Formato: Detalle consolidado de productos consumidos
+- Formato: Período seleccionado, unidades consumidas por producto y total general de unidades, sin importes (pantalla, impresión y Excel)
 
 **5. Pase de Turno**
 - Ruta: `/pase-turno`

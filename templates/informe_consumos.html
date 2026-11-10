@@ -324,7 +324,7 @@
             </form>
         </section>
 
-            <form method="POST" action="{{ url_for('exportar_informe_consumos_xlsx') }}" class="mt-3">
+            <form method="POST" action="{{ url_for('exportar_informe_consumos_xlsx') }}" class="acciones">
                 <input type="hidden" name="fecha_desde" value="{{ fecha_desde }}">
                 <input type="hidden" name="fecha_hasta" value="{{ fecha_hasta }}">
                 <button type="submit" class="btn btn-success">
@@ -356,10 +356,8 @@
                     </div>
 
                     <div class="indicador">
-                        <span>Importe total registrado</span>
-                        <strong>
-                            $ {{ "{:,.2f}".format(resultado.total_importe).replace(",", "X").replace(".", ",").replace("X", ".") }}
-                        </strong>
+                        <span>Período seleccionado</span>
+                        <strong>{{ periodo }}</strong>
                     </div>
                 </div>
 
@@ -376,7 +374,6 @@
                                 <tr>
                                     <th>Producto</th>
                                     <th class="numero">Unidades</th>
-                                    <th class="numero">Importe total</th>
                                 </tr>
                             </thead>
 
@@ -387,9 +384,6 @@
                                         <td class="numero">
                                             {{ "{:,.2f}".format(fila['Unidades']).replace(",", "X").replace(".", ",").replace("X", ".") }}
                                         </td>
-                                        <td class="numero">
-                                            $ {{ "{:,.2f}".format(fila['Importe total']).replace(",", "X").replace(".", ",").replace("X", ".") }}
-                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -399,9 +393,6 @@
                                     <td>Total general</td>
                                     <td class="numero">
                                         {{ "{:,.2f}".format(resultado.total_unidades).replace(",", "X").replace(".", ",").replace("X", ".") }}
-                                    </td>
-                                    <td class="numero">
-                                        $ {{ "{:,.2f}".format(resultado.total_importe).replace(",", "X").replace(".", ",").replace("X", ".") }}
                                     </td>
                                 </tr>
                             </tfoot>
