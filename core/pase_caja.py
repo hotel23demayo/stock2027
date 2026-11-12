@@ -1,6 +1,6 @@
 
-import math
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
@@ -127,7 +127,7 @@ def vincular_consumos_bebidas(df_salidas, df_consumos):
 
     Devuelve:
     - totales_por_estadia: importes confirmados por estadía.
-    - detalle_confirmado: consumos que integran esos importes.
+    - detalle_confirmado: consumos que integran esos importes, con monto_confirmado validado.
     - pendientes: consumos sin id_estadia de habitaciones con salida.
     - inconsistencias: consumos con datos que requieren revisión.
     - estadias_duplicadas: registros del padrón con id_estadia repetido.
@@ -155,7 +155,7 @@ def vincular_consumos_bebidas(df_salidas, df_consumos):
     # Los identificadores duplicados conservan total cero,
     # pero quedan identificados separadamente para revisión.
     totales = {
-        id_estadia: 0.0
+        id_estadia: Decimal('0')
         for id_estadia in ids
         if id_estadia
     }
@@ -242,18 +242,20 @@ def vincular_consumos_bebidas(df_salidas, df_consumos):
 
         # Validar el importe.
         try:
-            monto = float(consumo.get('monto', ''))
+            monto_confirmado = Decimal(str(consumo.get('monto', '')))
 
-            if not math.isfinite(monto) or monto < 0:
+            if not monto_confirmado.is_finite() or monto_confirmado < 0:
                 raise ValueError('Importe inválido')
 
-        except (TypeError, ValueError):
+        except (InvalidOperation, ValueError):
             inconsistencias.append(consumo.to_dict())
             continue
 
         # Incorporar el consumo confirmado.
-        totales[id_estadia] += monto
-        confirmados.append(consumo.to_dict())
+        totales[id_estadia] += monto_confirmado
+        registro = consumo.to_dict()
+        registro['monto_confirmado'] = monto_confirmado
+        confirmados.append(registro)
 
     return {
         'totales_por_estadia': totales,
@@ -299,7 +301,7 @@ def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
             {
                 'habitacion': habitacion,
                 'titular': titular,
-                'bebidas': 0.0
+                'bebidas': Decimal('0')
             }
         )
 
@@ -307,10 +309,10 @@ def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
             estadia.get('id_estadia', '')
         ).strip()
 
-        fila['bebidas'] += totales_por_estadia.get(
+        fila['bebidas'] += Decimal(str(totales_por_estadia.get(
             id_estadia,
-            0.0
-        )
+            0
+        )))
 
     return (
      pd.DataFrame(

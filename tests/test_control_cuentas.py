@@ -1,11 +1,14 @@
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 from html.parser import HTMLParser
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from openpyxl import load_workbook
 
 import app as aplicacion
 from core.control_cuentas import generar_control_cuentas
@@ -93,6 +96,7 @@ class TestControlCuentas(unittest.TestCase):
         self.assertEqual(cuentas[0]['unidades'], 7)
         self.assertEqual(len(cuentas[0]['detalle']), 4)
         self.assertIn('anulado', [c['estado'] for c in cuentas[0]['detalle']])
+        self.assertEqual([c['monto_confirmado'] for c in cuentas[0]['detalle']], [100, 50, 200, 0])
         self.assertEqual(resultado['total_bebidas'], 1050)
         self.assertEqual(resultado['total_pasajeros'], 5)
         self.assertEqual(resultado['total_habitaciones'], 3)
@@ -290,6 +294,164 @@ class TestRutaControlCuentas(unittest.TestCase):
                 respuesta = self.cliente.get('/control-cuentas')
                 self.assertEqual(respuesta.status_code, 503)
                 self.assertIn('No se pudo generar el control de cuentas', respuesta.get_data(as_text=True))
+
+    def preparar_exportacion(self):
+        hoy = date.today()
+        ingreso = (hoy - timedelta(days=2)).strftime('%d/%m/%Y')
+        egreso = (hoy + timedelta(days=2)).strftime('%d/%m/%Y')
+        pasajeros = [
+            pasajero('A', '101', 'V & 1', ingreso, egreso),
+            pasajero('B', '101', 'V & 1', ingreso, egreso),
+            pasajero('C', '101', 'V2', ingreso, egreso),
+            pasajero('D', '102', 'VACIA', ingreso, egreso),
+        ]
+        registros = [
+            consumo('A', monto='100.25', item='Agua'),
+            consumo('B', monto='50', item='=Producto'),
+            consumo('A', monto='900', estado='anulado', item='Anulado'),
+            consumo('C', monto='300', item='Otra cuenta'),
+            consumo('ANTERIOR', monto='9999', item='Histórico'),
+            consumo('A', habitacion='102', monto='9999', item='Incorrecto'),
+        ]
+        registros[4]['fecha'] = (hoy - timedelta(days=3)).strftime('%d/%m/%Y')
+        pd.DataFrame(pasajeros).to_csv(self.pasajeros, index=False)
+        pd.DataFrame(registros).to_csv(self.consumos, index=False)
+
+    def test_imprimir_cuenta_activa_no_limitada_al_checkout(self):
+        self.preparar_exportacion()
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        control = self.cliente.get('/control-cuentas').get_data(as_text=True)
+        self.assertIn('/control-cuentas/detalle?', control)
+        self.assertIn('/control-cuentas/exportar.xlsx', control)
+        respuesta = self.cliente.get('/control-cuentas/detalle', query_string={
+            'habitacion': '101', 'voucher': 'V & 1',
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        html = respuesta.get_data(as_text=True)
+        for texto in ('COMPROBANTE INFORMATIVO - NO FISCAL', '@page { size: A4',
+                      'V &amp; 1', 'A, B', 'Agua', '=Producto', '$ 150,25',
+                      'observaciones', 'Volver a Chequear Cuentas'):
+            self.assertIn(texto, html)
+        for texto in ('Otra cuenta', 'Histórico', 'Incorrecto', 'Anulado'):
+            self.assertNotIn(texto, html)
+        for query in ({}, {'habitacion': '101'}, {'habitacion': '101', 'voucher': 'NO'}):
+            self.assertEqual(self.cliente.get('/control-cuentas/detalle', query_string=query).status_code, 404)
+        vacia = self.cliente.get('/control-cuentas/detalle', query_string={
+            'habitacion': '102', 'voucher': 'VACIA',
+        }).get_data(as_text=True)
+        self.assertIn('No hay bebidas confirmadas', vacia)
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
+
+    def test_excel_cuentas_actuales_detalle_y_totales(self):
+        self.preparar_exportacion()
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.mimetype, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.addCleanup(libro.close)
+        detalle = libro['Detalle']
+        filas = list(detalle.iter_rows(values_only=True))
+        encabezados = filas[0]
+        registros = [dict(zip(encabezados, fila)) for fila in filas[1:]]
+        self.assertEqual([r['Producto'] for r in registros], ['Agua', '=Producto', 'Anulado', 'Otra cuenta'])
+        self.assertEqual(detalle['H3'].data_type, 's')
+        self.assertEqual([r['Importe confirmado'] for r in registros], [100.25, 50, 0, 300])
+        self.assertEqual([r['Voucher'] for r in registros], ['V & 1', 'V & 1', 'V & 1', 'V2'])
+        self.assertTrue(detalle.auto_filter.ref)
+        resumen = libro['Resumen']
+        filas_resumen = list(resumen.iter_rows(values_only=True))
+        self.assertIn(('101', 'V & 1', 'A', 'A, B', 150.25), filas_resumen)
+        self.assertIn(('101', 'V2', 'C', 'C', 300), filas_resumen)
+        self.assertIn(('102', 'VACIA', 'D', 'D', 0), filas_resumen)
+        self.assertIn(('TOTAL GENERAL', None, None, None, 450.25), filas_resumen)
+        self.assertEqual(resumen['A3'].value, 'Hay 1 observaciones pendientes de revisión en Chequear Cuentas. Los importes confirmados pueden estar incompletos')
+        for habitacion, voucher, _, _, subtotal in filas_resumen[5:-1]:
+            importe = sum(
+                Decimal(str(r['Importe confirmado'])) for r in registros
+                if r['Habitación'] == habitacion and r['Voucher'] == voucher
+            )
+            self.assertEqual(importe, Decimal(str(subtotal)))
+        self.assertEqual(sum(Decimal(str(r['Importe confirmado'])) for r in registros),
+                         Decimal(str(filas_resumen[-1][-1])))
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
+
+    def test_exportaciones_reportan_error_al_faltar_archivos(self):
+        self.consumos.unlink()
+        for ruta in ('/control-cuentas/detalle?habitacion=101&voucher=V1',
+                     '/control-cuentas/exportar.xlsx'):
+            respuesta = self.cliente.get(ruta)
+            self.assertEqual(respuesta.status_code, 503)
+            self.assertIn('No se pudo generar el control de cuentas', respuesta.get_data(as_text=True))
+
+    def test_excel_sin_cuentas_y_cantidad_invalida_conservada(self):
+        pd.DataFrame(columns=COLUMNAS_PASAJEROS).to_csv(self.pasajeros, index=False)
+        respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.assertEqual(libro['Resumen']['E6'].value, 0)
+        self.assertEqual(libro['Detalle'].max_row, 1)
+        libro.close()
+
+        hoy = date.today().strftime('%d/%m/%Y')
+        pd.DataFrame([pasajero('A', '101', 'V1', hoy, hoy)]).to_csv(self.pasajeros, index=False)
+        pd.DataFrame([consumo('A', cantidad='no válida')]).to_csv(self.consumos, index=False)
+        respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.addCleanup(libro.close)
+        self.assertEqual(libro['Detalle']['I2'].value, 'no válida')
+        self.assertEqual(libro['Detalle']['M2'].value, 100)
+        self.assertEqual(libro['Resumen']['A3'].value, 'Hay 1 observaciones pendientes de revisión en Chequear Cuentas. Los importes confirmados pueden estar incompletos')
+
+    def test_excel_sin_observaciones_y_con_importes_invalidos_para_revision(self):
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.assertEqual(libro['Resumen']['A3'].value,
+                         'Sin observaciones pendientes. Importes confirmados según los registros disponibles')
+        libro.close()
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
+
+        registros = [
+            consumo('A', monto='0.1', item='Uno'),
+            consumo('A', monto='0.2', item='Dos'),
+            consumo('A', monto='0.3', item='Tres'),
+            consumo('A', monto='no-numero', item='Inválido'),
+            consumo('A', monto='nan', item='No finito'),
+            consumo('A', monto='importe anulado inválido', estado='anulado', item='Anulado inválido'),
+        ]
+        pd.DataFrame(registros).to_csv(self.consumos, index=False)
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.addCleanup(libro.close)
+        filas = list(libro['Detalle'].iter_rows(min_row=2, values_only=True))
+        self.assertEqual([fila[7] for fila in filas], ['Uno', 'Dos', 'Tres', 'Anulado inválido'])
+        self.assertEqual(filas[-1][10], 'importe anulado inválido')
+        self.assertEqual(filas[-1][12], 0)
+        self.assertEqual(sum(Decimal(str(fila[12])) for fila in filas),
+                         Decimal(str(libro['Resumen']['E6'].value)))
+        self.assertEqual(libro['Resumen']['E6'].value, libro['Resumen']['E7'].value)
+        self.assertIn('Hay 2 observaciones pendientes', libro['Resumen']['A3'].value)
+        control = self.cliente.get('/control-cuentas').get_data(as_text=True)
+        self.assertIn('Inválido', control)
+        self.assertIn('No finito', control)
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
+
+    def test_excel_usa_importe_validado_sin_reinterpretar_monto_original(self):
+        datos = aplicacion.obtener_datos_control_cuentas(date.today())
+        datos['cuentas'][0]['detalle'][0]['monto'] = 'monto no interpretable'
+        with patch.object(aplicacion, 'obtener_datos_control_cuentas', return_value=datos):
+            respuesta = self.cliente.get('/control-cuentas/exportar.xlsx')
+        self.assertEqual(respuesta.status_code, 200)
+        libro = load_workbook(BytesIO(respuesta.get_data()))
+        self.addCleanup(libro.close)
+        self.assertEqual(libro['Detalle']['K2'].value, 'monto no interpretable')
+        self.assertEqual(libro['Detalle']['M2'].value, 100)
+        self.assertEqual(libro['Resumen']['E6'].value, 100)
 
 
 if __name__ == '__main__':

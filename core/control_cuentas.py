@@ -52,7 +52,7 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
     totales = dict(vinculacion['totales_por_estadia'])
     for identificador in repetidos:
         if identificador in totales:
-            totales[identificador] = 0.0
+            totales[identificador] = Decimal('0')
     for registro in vinculacion['pendientes'].to_dict('records'):
         observar('Consumo sin id_estadia', registro)
     for registro in vinculacion['inconsistencias'].to_dict('records'):
@@ -129,6 +129,7 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
             if habitacion != clave_cuenta(por_id[identificador])[0]:
                 observar('Consumo anulado con habitación inconsistente', consumo)
             else:
+                consumo['monto_confirmado'] = Decimal('0')
                 anulados.append(consumo)
 
     detalles = {}

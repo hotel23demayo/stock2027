@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 
@@ -284,6 +285,31 @@ class TestLecturaPaseCaja(unittest.TestCase):
             4000
         )
         self.assertEqual(len(resultado['detalle_confirmado']), 2)
+
+    def test_importes_decimales_se_acumulan_exactamente(self):
+        salidas = pd.DataFrame([{'id_estadia': 'EST-001', 'Nro. habitación': '104'}])
+        consumos = pd.DataFrame([
+            {'id_estadia': 'EST-001', 'habitacion': '104', 'categoria': 'Bebidas',
+             'monto': monto, 'estado': 'vigente'}
+            for monto in ('0.1', '0.2', '0.3')
+        ])
+        resultado = vincular_consumos_bebidas(salidas, consumos)
+        self.assertEqual(resultado['totales_por_estadia']['EST-001'], Decimal('0.6'))
+        self.assertEqual(
+            resultado['detalle_confirmado']['monto_confirmado'].tolist(),
+            [Decimal('0.1'), Decimal('0.2'), Decimal('0.3')],
+        )
+
+    def test_importe_decimal_con_precision_adicional_conserva_digitos(self):
+        salidas = pd.DataFrame([{'id_estadia': 'EST-001', 'Nro. habitación': '104'}])
+        consumos = pd.DataFrame([{
+            'id_estadia': 'EST-001', 'habitacion': '104', 'categoria': 'Bebidas',
+            'monto': '0.1234567890123456789', 'estado': 'vigente',
+        }])
+        resultado = vincular_consumos_bebidas(salidas, consumos)
+        esperado = Decimal('0.1234567890123456789')
+        self.assertEqual(resultado['totales_por_estadia']['EST-001'], esperado)
+        self.assertEqual(resultado['detalle_confirmado'].iloc[0]['monto_confirmado'], esperado)
 
     def test_excluir_consumos_anulados(self):
         salidas = pd.DataFrame([{

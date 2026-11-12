@@ -35,7 +35,11 @@
 <body>
     <nav class="acciones">
         <button type="button" onclick="window.print()">Imprimir detalle</button>
+        {% if volver_control %}
+        <a href="{{ url_for('control_cuentas') }}">Volver a Chequear Cuentas</a>
+        {% else %}
         <a href="{{ url_for('pase_turno') }}">Volver al Pase de Turno</a>
+        {% endif %}
     </nav>
     <main>
         <header>
@@ -46,8 +50,14 @@
             <div><strong>Habitación:</strong> {{ cuenta.habitacion }}</div>
             <div><strong>Voucher:</strong> {{ cuenta.voucher or '—' }}</div>
             <div><strong>Titular:</strong> {{ cuenta.titular }}</div>
+            {% if cuenta.pasajeros is defined %}
+            <div><strong>Pasajeros:</strong> {{ cuenta.pasajeros|join(', ') }}</div>
+            {% endif %}
             <div><strong>Fecha de emisión:</strong> {{ fecha_emision }}</div>
         </section>
+        {% if observaciones %}
+        <p class="nota">Hay {{ observaciones }} observaciones para revisar en Chequear Cuentas. Los importes confirmados pueden estar incompletos.</p>
+        {% endif %}
         <table>
             <thead>
                 <tr><th>Fecha</th><th>Producto</th><th>Cantidad</th><th class="numero">Precio unitario</th><th class="numero">Importe</th></tr>

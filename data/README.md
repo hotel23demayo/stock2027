@@ -40,6 +40,7 @@ id_consumo,id_estadia,fecha,habitacion,pasajero,categoria,item,cantidad,precio_u
 - Anular un consumo no lo borra: se marca `estado=anulado` con fecha y motivo.
 - El checkout no elimina consumos: el historial es permanente.
 - En Chequear Cuentas, los consumos de otra estadía anteriores al ingreso de todos los ocupantes actuales se excluyen del control, sin sumarlos a sus cuentas; el historial completo se consulta en Ver consumos. Los posteriores al ingreso y dentro del alojamiento de algún ocupante se señalan para revisión. Como el padrón no registra la hora de ingreso, el mismo día puede ser ambiguo; si no se puede establecer la relación temporal, el origen no es verificable y tampoco se atribuye a la cuenta actual.
+- Chequear Cuentas permite imprimir el detalle informativo no fiscal de cada cuenta activa y descargar un Excel con el resumen y el detalle filtrable. El Excel muestra los anulados con importe confirmado cero; las observaciones se revisan en el control. Ninguna de estas consultas modifica los CSV originales.
 - Las columnas faltantes en archivos viejos se migran automáticamente al leer.
 
 **Para empezar de cero** (p. ej. tras las pruebas) usar el script de reinicio, que hace backup antes de vaciar: ver [REINICIO_DATOS.md](../REINICIO_DATOS.md).
