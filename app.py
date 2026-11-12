@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, redirect, flash, send_file
+from flask import Flask, abort, render_template, request, redirect, flash, send_file
 import pandas as pd
 import os
 from datetime import datetime
+from decimal import Decimal
 import sys
 import tempfile
 from core.informe_consumos import generar_consolidado_productos
+from core.control_cuentas import generar_control_cuentas
 
 
 # Importar módulos del core
@@ -26,11 +28,14 @@ from core.consumos import (
 from core.reserva_express import crear_reserva_express, obtener_habitaciones_disponibles, validar_datos_reserva
 from core.identidad_estadias import procesar_identidades
 from core.pase_caja import (
+    COLUMNAS_PASAJEROS,
+    COLUMNAS_CONSUMOS,
     leer_pasajeros,
     leer_consumos,
     obtener_pasajeros_con_salida,
     vincular_consumos_bebidas,
-    consolidar_salidas_por_habitacion
+    consolidar_salidas_por_habitacion,
+    clave_cuenta
 )
 
 app = Flask(__name__)
@@ -39,6 +44,16 @@ app.secret_key = 'temporada_2026_recepcion_key_secreta'
 # Archivos de datos
 DB_PASAJEROS = 'data/pasajeros.csv'
 DB_CONSUMOS = 'data/consumos_diarios.csv'
+
+
+@app.template_filter('importe_pase')
+def formatear_importe_pase(importe):
+    """Conserva los decimales del importe confirmado al mostrarlo."""
+    texto = format(Decimal(str(importe)), ',f')
+    if '.' in texto:
+        texto = texto.rstrip('0').rstrip('.')
+    return texto.replace(',', 'X').replace('.', ',').replace('X', '.')
+
 
 def validar_pasajero(habitacion):
     """
@@ -147,32 +162,14 @@ def dashboard():
                          estadisticas=datos['estadisticas'],
                          checkouts_hoy=datos['checkouts_hoy'])
 
-@app.route('/pase-turno')
-def pase_turno():
-    """Informe de pase de turno de recepción."""
-
-    # Verificar que existan los archivos operativos.
-    if not os.path.exists(DB_PASAJEROS):
-        flash('No se encuentra el archivo de pasajeros.', 'warning')
-        return redirect('/dashboard')
-
-    if not os.path.exists(DB_CONSUMOS):
-        flash('No se encuentra el archivo de consumos.', 'warning')
-        return redirect('/dashboard')
-
-    # Leer los archivos sin modificar sus contenidos.
+def obtener_datos_pase(ahora):
+    """Construye el pase y sus cuentas a partir de los datos operativos."""
     df_pasajeros = leer_pasajeros(DB_PASAJEROS)
     df_consumos = leer_consumos(DB_CONSUMOS)
-
-    ahora = datetime.now()
-
-    # Identificar pasajeros con salida en la fecha de emisión.
     salidas = obtener_pasajeros_con_salida(
         df_pasajeros,
         ahora.date()
     )
-
-    # Vincular y calcular los consumos de bebidas.
     resultado = vincular_consumos_bebidas(
         salidas,
         df_consumos
@@ -181,6 +178,45 @@ def pase_turno():
         salidas,
         resultado['totales_por_estadia']
     )
+    grupos = {}
+    for _, estadia in salidas.iterrows():
+        grupos.setdefault(clave_cuenta(estadia), []).append(estadia['id_estadia'].strip())
+    claves = pd.DataFrame(
+        [{'habitacion': habitacion, 'voucher': voucher}
+         for habitacion, voucher in grupos],
+        columns=['habitacion', 'voucher']
+    ).sort_values(
+        by='habitacion',
+        key=lambda columna: pd.to_numeric(columna, errors='coerce'),
+        kind='stable',
+        na_position='last'
+    ).reset_index(drop=True)
+    cuentas = []
+    for fila, clave in zip(filas_pase.to_dict('records'), claves.to_dict('records')):
+        cuenta = {**fila, 'voucher': clave['voucher']}
+        cuenta['ids_estadia'] = grupos[(clave['habitacion'], clave['voucher'])]
+        cuentas.append(cuenta)
+    return filas_pase, resultado, cuentas
+
+
+def archivos_pase_disponibles():
+    if not os.path.exists(DB_PASAJEROS):
+        flash('No se encuentra el archivo de pasajeros.', 'warning')
+        return False
+    if not os.path.exists(DB_CONSUMOS):
+        flash('No se encuentra el archivo de consumos.', 'warning')
+        return False
+    return True
+
+
+@app.route('/pase-turno')
+def pase_turno():
+    """Informe de pase de turno de recepción."""
+    if not archivos_pase_disponibles():
+        return redirect('/dashboard')
+
+    ahora = datetime.now()
+    filas_pase, resultado, cuentas = obtener_datos_pase(ahora)
     filas_por_pagina = 28
     filas = filas_pase.to_dict('records')
     paginas_pase = [
@@ -201,6 +237,7 @@ def pase_turno():
     return render_template(
         'pase_turno.html',
         filas_pase=filas_pase,
+        cuentas=cuentas,
         paginas_pase=paginas_pase,
         total_bebidas=filas_pase['bebidas'].sum(),
         detalle=resultado['detalle_confirmado'],
@@ -208,6 +245,50 @@ def pase_turno():
         inconsistencias=resultado['inconsistencias'],
         estadias_duplicadas=resultado['estadias_duplicadas'],
         fecha_emision=ahora.strftime('%d/%m/%Y'),
+    )
+
+
+def fecha_consumo_para_orden(consumo):
+    fecha = consumo.get('fecha', '').strip()
+    for formato in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y'):
+        try:
+            return (0, datetime.strptime(fecha, formato))
+        except ValueError:
+            continue
+    return (1, datetime.max)
+
+
+@app.route('/pase-turno/detalle')
+def detalle_cuenta_pase():
+    """Detalle informativo de una cuenta incluida en el pase vigente."""
+    if not archivos_pase_disponibles():
+        return redirect('/dashboard')
+    if 'habitacion' not in request.args or 'voucher' not in request.args:
+        abort(404)
+
+    ahora = datetime.now()
+    _, resultado, cuentas = obtener_datos_pase(ahora)
+    cuenta = next(
+        (fila for fila in cuentas
+         if fila['habitacion'] == request.args['habitacion']
+         and fila['voucher'] == request.args['voucher']),
+        None
+    )
+    if cuenta is None:
+        abort(404)
+
+    detalle = resultado['detalle_confirmado']
+    if detalle.empty:
+        consumos = []
+    else:
+        ids = set(cuenta['ids_estadia'])
+        consumos = detalle.loc[
+            detalle['id_estadia'].astype(str).str.strip().isin(ids)
+        ].to_dict('records')
+    consumos.sort(key=fecha_consumo_para_orden)
+    return render_template(
+        'detalle_cuenta_pase.html', cuenta=cuenta, consumos=consumos,
+        fecha_emision=ahora.strftime('%d/%m/%Y')
     )
 
 @app.route('/listado-pasajeros-alojados')
@@ -226,6 +307,35 @@ def listado_pasajeros_alojados():
         fecha_emision=ahora.strftime('%d/%m/%Y'),
         hora_emision=ahora.strftime('%H:%M')
     )
+
+
+@app.route('/control-cuentas')
+def control_cuentas():
+    """Consulta de solo lectura de cuentas de estadías activas."""
+    try:
+        pasajeros = pd.read_csv(DB_PASAJEROS, dtype=str, keep_default_na=False)
+        consumos = pd.read_csv(DB_CONSUMOS, dtype=str, keep_default_na=False)
+        requeridas = (
+            (pasajeros, {'id_estadia', 'Nro. habitación', 'Apellido y nombre',
+                         'Fecha de ingreso', 'Fecha de egreso', 'Voucher'}, 'pasajeros'),
+            (consumos, {'id_estadia', 'habitacion', 'categoria', 'monto', 'estado'}, 'consumos'),
+        )
+        for tabla, columnas, nombre in requeridas:
+            faltantes = columnas - set(tabla.columns)
+            if faltantes:
+                raise ValueError(f"Faltan columnas de {nombre}: {', '.join(sorted(faltantes))}")
+        for tabla, columnas in ((pasajeros, COLUMNAS_PASAJEROS), (consumos, COLUMNAS_CONSUMOS)):
+            for columna in columnas:
+                if columna not in tabla.columns:
+                    tabla[columna] = ''
+        ahora = datetime.now()
+        datos = generar_control_cuentas(pasajeros, consumos, ahora.date())
+    except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError, ValueError) as error:
+        app.logger.warning('No se pudo generar el control de cuentas: %s', error)
+        return render_template('control_cuentas.html', error=str(error)), 503
+
+    return render_template('control_cuentas.html', datos=datos, fecha_emision=ahora)
+
 
 @app.route('/habitacion/<int:num_habitacion>')
 def ficha_habitacion(num_habitacion):
@@ -1314,6 +1424,11 @@ def bebidas_rapidas():
     )
 
 
+def formatear_periodo_consumos(desde, hasta):
+    inicio = desde.strftime('%d/%m/%Y')
+    return inicio if desde.date() == hasta.date() else f"{inicio} al {hasta.strftime('%d/%m/%Y')}"
+
+
 @app.route('/informe-consumos', methods=['GET', 'POST'])
 def informe_consumos():
     """Consulta el consolidado de productos consumidos por período."""
@@ -1324,6 +1439,7 @@ def informe_consumos():
 
     resultado = None
     error = None
+    periodo = None
 
     if request.method == 'POST':
         try:
@@ -1337,6 +1453,7 @@ def informe_consumos():
                 hasta.strftime('%d/%m/%Y'),
                 DB_CONSUMOS,
             )
+            periodo = formatear_periodo_consumos(desde, hasta)
 
         except (ValueError, TypeError) as exc:
             error = str(exc)
@@ -1347,6 +1464,7 @@ def informe_consumos():
         fecha_hasta=fecha_hasta,
         resultado=resultado,
         error=error,
+        periodo=periodo,
     )
 
 @app.route('/informe-consumos-xlsx', methods=['POST'])
@@ -1354,7 +1472,6 @@ def exportar_informe_consumos_xlsx():
     """Exporta a Excel el consolidado de productos del período seleccionado."""
 
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
 
     fecha_desde = request.form.get('fecha_desde', '').strip()
     fecha_hasta = request.form.get('fecha_hasta', '').strip()
@@ -1373,12 +1490,12 @@ def exportar_informe_consumos_xlsx():
             archivo_salida = tmp.name
 
         with pd.ExcelWriter(archivo_salida, engine='openpyxl') as writer:
-            detalle = resultado['detalle'].copy()
+            detalle = resultado['detalle'][['Producto', 'Unidades']].copy()
             detalle.to_excel(writer, sheet_name='Informe de consumos', index=False, startrow=4)
 
             hoja = writer.sheets['Informe de consumos']
             hoja['A1'] = 'INFORME CONSOLIDADO DE CONSUMOS'
-            hoja['A2'] = f"Período: {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+            hoja['A2'] = f"Período: {formatear_periodo_consumos(desde, hasta)}"
             hoja['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 
             fila_encabezado = 5
@@ -1386,9 +1503,8 @@ def exportar_informe_consumos_xlsx():
 
             hoja.cell(row=fila_total, column=1, value='TOTAL GENERAL')
             hoja.cell(row=fila_total, column=2, value=resultado['total_unidades'])
-            hoja.cell(row=fila_total, column=3, value=resultado['total_importe'])
 
-            hoja.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+            hoja.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
             hoja['A1'].font = Font(bold=True, size=16, color='FFFFFF')
             hoja['A1'].fill = PatternFill('solid', fgColor='245B78')
             hoja['A1'].alignment = Alignment(horizontal='center')
@@ -1400,7 +1516,6 @@ def exportar_informe_consumos_xlsx():
 
             for fila in range(fila_encabezado + 1, fila_total + 1):
                 hoja.cell(row=fila, column=2).number_format = '#,##0.##'
-                hoja.cell(row=fila, column=3).number_format = '$ #,##0.00'
 
             for celda in hoja[fila_total]:
                 celda.font = Font(bold=True)
@@ -1408,9 +1523,8 @@ def exportar_informe_consumos_xlsx():
 
             hoja.column_dimensions['A'].width = 38
             hoja.column_dimensions['B'].width = 16
-            hoja.column_dimensions['C'].width = 22
             hoja.freeze_panes = 'A6'
-            hoja.auto_filter.ref = f'A5:C{fila_encabezado + len(detalle)}'
+            hoja.auto_filter.ref = f'A5:B{fila_encabezado + len(detalle)}'
 
         nombre_archivo = (
             f"informe_consumos_{desde.strftime('%d-%m-%Y')}_"

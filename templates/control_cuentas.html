@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Control preventivo de cuentas</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; background: #eef1f4; color: #202833; font: 14px Arial, sans-serif; }
+        main { max-width: 1200px; margin: auto; padding: 24px; background: white; border-radius: 8px; }
+        h1 { font-size: 22px; color: #263746; }
+        h2 { font-size: 18px; margin-top: 30px; }
+        .acciones, .resumen { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 auto 18px; max-width: 1200px; }
+        .acciones a { padding: 10px 14px; border-radius: 5px; background: #34495e; color: white; text-decoration: none; }
+        .indicador { flex: 1 1 160px; padding: 12px; background: #f2f6f9; border: 1px solid #dce2e8; border-radius: 5px; }
+        .indicador strong { display: block; font-size: 20px; }
+        .cuenta { margin: 12px 0; padding: 14px; border: 1px solid #d8dee5; border-radius: 5px; }
+        .cuenta h3 { margin: 0 0 8px; font-size: 16px; }
+        .badge { display: inline-block; padding: 3px 7px; color: #075d3e; background: #d7f3e5; border-radius: 4px; font-size: 12px; }
+        .alerta { padding: 12px; background: #fff3cd; border: 1px solid #f1d68b; border-radius: 5px; }
+        .anulado { color: #8a3333; background: #fff3f3; }
+        .tabla { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border-bottom: 1px solid #dce2e8; text-align: left; vertical-align: top; }
+        th { background: #f7f9fb; }
+        details { margin-top: 10px; }
+        summary { cursor: pointer; color: #145a86; font-weight: bold; }
+        @media print { .acciones { display: none; } body { background: white; padding: 0; } main { padding: 0; } }
+    </style>
+</head>
+<body>
+    {% macro dinero(valor) -%}
+        $ {{ "{:,.2f}".format(valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+    {%- endmacro %}
+    <nav class="acciones">
+        <a href="{{ url_for('listado_pasajeros_alojados') }}">Listado de pasajeros</a>
+        <a href="{{ url_for('dashboard') }}">Volver al dashboard</a>
+    </nav>
+    <main>
+        <h1>CONTROL PREVENTIVO DE CUENTAS DEL CONTINGENTE</h1>
+        {% if error %}
+        <p class="alerta" role="alert">No se pudo generar el control de cuentas: {{ error }}</p>
+        {% else %}
+        <p>Estadías activas del hotel · Emisión: {{ fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
+        <section class="resumen" aria-label="Resumen general">
+            <div class="indicador"><strong>{{ datos.total_habitaciones }}</strong>Habitaciones ocupadas</div>
+            <div class="indicador"><strong>{{ datos.cuentas|length }}</strong>Cuentas identificadas</div>
+            <div class="indicador"><strong>{{ datos.total_pasajeros }}</strong>Pasajeros alojados</div>
+            <div class="indicador"><strong>{{ datos.cuentas_con_consumos }}</strong>Cuentas con consumos vigentes</div>
+            <div class="indicador"><strong>{{ dinero(datos.total_bebidas) }}</strong>Total confirmado de bebidas</div>
+        </section>
+        {% if datos.observaciones %}
+        <p class="alerta">Hay {{ datos.observaciones|length }} observación(es) para revisar. Los consumos no atribuibles no se incluyen en el importe confirmado.</p>
+        {% endif %}
+        <h2>Cuentas por habitación y voucher</h2>
+        {% for cuenta in datos.cuentas %}
+        <section class="cuenta">
+            <h3>Habitación {{ cuenta.habitacion }} · Voucher {{ cuenta.voucher }} · {{ cuenta.titular }}</h3>
+            <p>Pasajeros ({{ cuenta.pasajeros|length }}): {{ cuenta.pasajeros|join(', ') }}</p>
+            <p>
+                Consumos: {{ cuenta.unidades }} unidades vigentes{% if cuenta.unidades_incompletas %} (cantidad incompleta; revisar observaciones){% endif %}
+                · <strong>Importe confirmado: {{ dinero(cuenta.bebidas) }}</strong>
+                {% if cuenta.tiene_consumos %}<span class="badge">Con consumos</span>{% endif %}
+            </p>
+            <details>
+                <summary>Detalle de consumos ({{ cuenta.detalle|length }})</summary>
+                <div class="tabla">
+                    <table>
+                        <thead><tr><th>Fecha y hora</th><th>Pasajero</th><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Importe</th><th>Estado</th></tr></thead>
+                        <tbody>
+                        {% for consumo in cuenta.detalle %}
+                        <tr{% if consumo.estado|lower|trim == 'anulado' %} class="anulado"{% endif %}>
+                            <td>{{ consumo.fecha or '—' }}</td><td>{{ consumo.pasajero or '—' }}</td>
+                            <td>{{ consumo.item or '—' }}</td><td>{{ consumo.cantidad or '—' }}</td>
+                            <td>{{ consumo.precio_unitario or '—' }}</td><td>{{ consumo.monto or '—' }}</td>
+                            <td>{{ consumo.estado }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7">No hay consumos vinculados a esta cuenta.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+        {% else %}
+        <p>No hay cuentas identificadas para las estadías activas.</p>
+        {% endfor %}
+        <p><strong>Total de estas cuentas: {{ dinero(datos.total_bebidas) }}</strong></p>
+        {% if datos.observaciones %}
+        <section>
+            <h2>Observaciones para revisión</h2>
+            <p>Los consumos de estadías no activas se muestran cuando figuran en una habitación actualmente ocupada; el resto permanece en el historial.</p>
+            <div class="tabla"><table>
+                <thead><tr><th>Motivo</th><th>Habitación</th><th>Pasajero</th><th>ID estadía</th><th>ID consumo</th><th>Fecha</th><th>Producto</th><th>Importe</th><th>Estado</th></tr></thead>
+                <tbody>
+                {% for obs in datos.observaciones %}
+                <tr><td>{{ obs.motivo }}</td><td>{{ obs.registro.get('habitacion', obs.registro.get('Nro. habitación', '')) }}</td>
+                    <td>{{ obs.registro.get('pasajero', obs.registro.get('Apellido y nombre', '')) }}</td>
+                    <td>{{ obs.registro.get('id_estadia', '') }}</td><td>{{ obs.registro.get('id_consumo', '') }}</td>
+                    <td>{{ obs.registro.get('fecha', '') }}</td><td>{{ obs.registro.get('item', '') }}</td>
+                    <td>{{ obs.registro.get('monto', '') }}</td><td>{{ obs.registro.get('estado', '') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table></div>
+        </section>
+        {% endif %}
+        {% endif %}
+    </main>
+</body>
+</html>

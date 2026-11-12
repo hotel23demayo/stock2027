@@ -264,6 +264,14 @@ def vincular_consumos_bebidas(df_salidas, df_consumos):
     }
 
 
+def clave_cuenta(estadia):
+    """Identifica una cuenta con el mismo criterio usado en el pase."""
+    return (
+        str(estadia.get('Nro. habitación', '')).strip(),
+        str(estadia.get('Voucher', '')).strip()
+    )
+
+
 def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
     """
     Consolida las salidas por habitación y voucher.
@@ -278,13 +286,7 @@ def consolidar_salidas_por_habitacion(df_salidas, totales_por_estadia):
 
     for _, estadia in df_salidas.iterrows():
 
-        habitacion = str(
-            estadia.get('Nro. habitación', '')
-        ).strip()
-
-        voucher = str(
-            estadia.get('Voucher', '')
-        ).strip()
+        habitacion, voucher = clave_cuenta(estadia)
 
         titular = str(
             estadia.get('Apellido y nombre', '')
