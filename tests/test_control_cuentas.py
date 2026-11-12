@@ -123,7 +123,7 @@ class TestControlCuentas(unittest.TestCase):
         self.assertIn('Consumo sin id_estadia', motivos)
         self.assertIn('id_estadia duplicado en el padrón; consumos excluidos', motivos)
         self.assertIn('Consumo con id_estadia duplicado', motivos)
-        self.assertIn('Consumo de una estadía no activa en habitación ocupada', motivos)
+        self.assertIn('Consumo de otra estadía durante el alojamiento actual', motivos)
         self.assertIn('Consumo anulado con habitación inconsistente', motivos)
         self.assertIn('Cantidad inválida o faltante en consumo confirmado', motivos)
         self.assertIn('Habitación del consumo inconsistente', motivos)
@@ -149,6 +149,72 @@ class TestControlCuentas(unittest.TestCase):
         resultado = self.generar([pasajero('A', '101', ''), pasajero('B', '101', '')], [])
         self.assertEqual(resultado['cuentas'], [])
         self.assertEqual(len(resultado['observaciones']), 2)
+
+    def test_clasificacion_temporal_sin_atribuir_consumos_ajenos(self):
+        pasajeros = [pasajero('ACTUAL', '101', 'V1', '02/11/2026', '05/11/2026')]
+        registros = []
+        for identificador, fecha in (
+            ('ANTERIOR', '01/11/2026 23:59'),
+            ('ANTERIOR', '2026-11-01'),
+            ('MISMO_DIA', '02/11/2026 10:00'),
+            ('DENTRO', '03/11/2026 10:00'),
+            ('EGRESO', '05/11/2026'),
+            ('FUERA', '06/11/2026'),
+            ('INVALIDO', 'fecha incorrecta'),
+            ('VACIO', ''),
+        ):
+            registro = consumo(identificador)
+            registro['fecha'] = fecha
+            registros.append(registro)
+        registros.append(consumo('ACTUAL'))
+        resultado = self.generar(pasajeros, registros)
+        self.assertNotIn('historicos', resultado)
+        motivos = {o['registro']['id_estadia']: o['motivo'] for o in resultado['observaciones']}
+        self.assertNotIn('ANTERIOR', motivos)
+        for identificador in ('MISMO_DIA', 'FUERA', 'INVALIDO', 'VACIO'):
+            self.assertEqual(motivos[identificador], 'Consumo de origen no verificable')
+        for identificador in ('DENTRO', 'EGRESO'):
+            self.assertEqual(motivos[identificador], 'Consumo de otra estadía durante el alojamiento actual')
+        self.assertEqual(resultado['total_bebidas'], 100)
+        self.assertEqual([c['id_estadia'] for c in resultado['cuentas'][0]['detalle']], ['ACTUAL'])
+
+    def test_varios_ingresos_y_fechas_invalidas_se_tratan_con_cautela(self):
+        registros = []
+        for fecha in ('01/11/2026', '02/11/2026', '03/11/2026'):
+            registro = consumo('OTRO')
+            registro['fecha'] = fecha
+            registros.append(registro)
+        pasajeros = [
+            pasajero('A', '101', 'V1', '02/11/2026', '05/11/2026'),
+            pasajero('B', '101', 'V2', '01/11/2026', '05/11/2026'),
+        ]
+        resultado = self.generar(pasajeros, registros)
+        self.assertEqual([o['motivo'] for o in resultado['observaciones']], [
+            'Consumo de origen no verificable',
+            'Consumo de otra estadía durante el alojamiento actual',
+            'Consumo de otra estadía durante el alojamiento actual',
+        ])
+        pasajeros.append(pasajero('SIN_FECHA', '101', 'V3', '', '05/11/2026'))
+        registros[0]['fecha'] = '31/10/2026'
+        resultado = self.generar(pasajeros, registros[:1])
+        self.assertIn('Consumo de origen no verificable',
+                      [o['motivo'] for o in resultado['observaciones']])
+
+    def test_historial_masivo_y_consumo_posterior_se_mantienen_separados(self):
+        pasajeros = [pasajero('ACTUAL', '101', 'V1', '02/11/2026', '05/11/2026')]
+        registros = []
+        for i in range(542):
+            registro = consumo('ANTERIOR', estado='anulado' if i == 0 else 'vigente')
+            registro['id_consumo'] = str(i)
+            registro['fecha'] = '01/11/2026 10:00'
+            registros.append(registro)
+        posterior = consumo('OTRO')
+        posterior['fecha'] = '03/11/2026 10:00'
+        resultado = self.generar(pasajeros, registros + [posterior])
+        self.assertNotIn('historicos', resultado)
+        self.assertEqual(len(resultado['observaciones']), 1)
+        self.assertEqual(resultado['observaciones'][0]['registro']['id_estadia'], 'OTRO')
+        self.assertEqual(resultado['total_bebidas'], 0)
 
 
 class TestRutaControlCuentas(unittest.TestCase):
@@ -186,6 +252,33 @@ class TestRutaControlCuentas(unittest.TestCase):
         self.assertIn('Chequear Cuentas', enlace['texto'])
         self.assertIn('consumos-panel', enlace['paneles'])
         self.assertNotIn('recepcion-panel', enlace['paneles'])
+
+    def test_excluye_historial_sin_observaciones_ni_modificaciones(self):
+        registro = consumo('ANTERIOR')
+        registro['fecha'] = '01/01/2000 10:00'
+        pd.DataFrame([registro, registro]).to_csv(self.consumos, index=False)
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        respuesta = self.cliente.get('/control-cuentas')
+        html = respuesta.get_data(as_text=True)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn('Historial de estadías anteriores', html)
+        self.assertNotIn('ANTERIOR', html)
+        self.assertNotIn('observación(es) para revisar', html)
+        self.assertIn('$ 0,00', html)
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
+
+    def test_muestra_consumo_ambiguo_sin_atribuirlo(self):
+        registro = consumo('OTRO', monto='500')
+        registro['fecha'] = date.today().strftime('%d/%m/%Y') + ' 10:00'
+        pd.DataFrame([consumo('A'), registro]).to_csv(self.consumos, index=False)
+        originales = [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)]
+        respuesta = self.cliente.get('/control-cuentas')
+        html = respuesta.get_data(as_text=True)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn('Consumo de origen no verificable', html)
+        self.assertIn('OTRO', html)
+        self.assertIn('Importe confirmado: $ 100,00', html)
+        self.assertEqual(originales, [archivo.read_bytes() for archivo in (self.pasajeros, self.consumos)])
 
     def test_archivo_inexistente_vacio_o_columnas_faltantes_reporta_error(self):
         for contenido in (None, '', 'id_estadia\nA\n'):
