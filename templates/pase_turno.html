@@ -329,13 +329,13 @@
                         <td></td>
                         <td class="col-bebidas importe">
                             {% if fila['bebidas'] is not none %}
-                            $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
+                            $ {{ fila['bebidas']|importe_pase }}
                             {% endif %}
                         </td>
                         <td></td>
                         <td class="col-total importe">
                             {% if fila['bebidas'] is not none %}
-                            $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
+                            $ {{ fila['bebidas']|importe_pase }}
                             {% endif %}
                         </td>
                     </tr>
@@ -354,7 +354,7 @@
         {% elif total_bebidas > 0 %}
         <strong>
             Total confirmado de bebidas a cobrar:
-            $ {{ "{:,.0f}".format(total_bebidas).replace(',', '.') }}
+            $ {{ total_bebidas|importe_pase }}
         </strong>
         {% else %}
         <strong>
@@ -373,36 +373,40 @@
         <thead>
             <tr>
                 <th>HAB</th>
+                <th>TITULAR / VOUCHER</th>
                 <th>ESTADÍA</th>
                 <th>MAP</th>
                 <th>BEBIDAS</th>
                 <th>FORMA DE PAGO</th>
                 <th>TOTAL</th>
+                <th>DETALLE DE CONSUMOS</th>
             </tr>
         </thead>
 
         <tbody>
-            {% for _, fila in filas_pase.iterrows() %}
+            {% for fila in cuentas %}
             <tr>
                 <td>{{ fila['habitacion'] }}</td>
+                <td>{{ fila['titular'] }}<br>Voucher: {{ fila['voucher'] or '—' }}</td>
                 <td></td>
                 <td></td>
                 <td class="numero">
-                    $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
+                    $ {{ fila['bebidas']|importe_pase }}
                 </td>
                 <td></td>
                 <td class="numero total">
-                    $ {{ "{:,.0f}".format(fila['bebidas']).replace(',', '.') }}
+                    $ {{ fila['bebidas']|importe_pase }}
                     {% if fila['bebidas'] > 0 %}
                     <span class="estado-fila estado-a-cobrar">A cobrar</span>
                     {% else %}
                     <span class="estado-fila estado-sin-deuda">Sin deuda de bebidas</span>
                     {% endif %}
                 </td>
+                <td><a href="{{ url_for('detalle_cuenta_pase', habitacion=fila['habitacion'], voucher=fila['voucher']) }}">Ver detalle</a></td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">
+                <td colspan="8">
                     No hay habitaciones con salida para esta fecha.
                 </td>
             </tr>
@@ -411,10 +415,11 @@
         {% if not filas_pase.empty %}
         <tfoot>
             <tr>
-                <td colspan="5" class="total">TOTAL BEBIDAS A COBRAR</td>
+                <td colspan="6" class="total">TOTAL BEBIDAS A COBRAR</td>
                 <td class="numero total">
-                    $ {{ "{:,.0f}".format(total_bebidas).replace(',', '.') }}
+                    $ {{ total_bebidas|importe_pase }}
                 </td>
+                <td></td>
             </tr>
         </tfoot>
         {% endif %}

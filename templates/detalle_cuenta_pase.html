@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Detalle de consumos de bebidas</title>
+    <style>
+        @page { size: A4 portrait; margin: 15mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; color: #222; background: #eef1f4; font: 14px Arial, sans-serif; }
+        .acciones, main { max-width: 850px; margin: 0 auto; }
+        .acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+        .acciones a, .acciones button { padding: 10px 15px; border: 0; border-radius: 4px; background: #34495e; color: white; font: inherit; text-decoration: none; cursor: pointer; }
+        main { padding: 28px; background: white; }
+        header { padding-bottom: 15px; border-bottom: 2px solid #263746; }
+        h1 { margin: 0 0 8px; font-size: 22px; color: #263746; }
+        .leyenda { margin: 0; font-weight: bold; color: #596675; }
+        .datos { display: flex; flex-wrap: wrap; gap: 12px 30px; margin: 20px 0; }
+        .datos div { min-width: 180px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 9px; border-bottom: 1px solid #cbd3dc; text-align: left; vertical-align: top; }
+        th { background: #edf2f6; }
+        .numero { text-align: right; white-space: nowrap; }
+        tfoot td { border-top: 2px solid #263746; font-weight: bold; }
+        .nota { margin-top: 20px; font-size: 12px; color: #596675; }
+        @media print {
+            body { padding: 0; background: white; }
+            main { max-width: none; padding: 0; }
+            .acciones { display: none; }
+            thead { display: table-header-group; }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="acciones">
+        <button type="button" onclick="window.print()">Imprimir detalle</button>
+        <a href="{{ url_for('pase_turno') }}">Volver al Pase de Turno</a>
+    </nav>
+    <main>
+        <header>
+            <h1>DETALLE DE CONSUMOS DE BEBIDAS</h1>
+            <p class="leyenda">COMPROBANTE INFORMATIVO - NO FISCAL</p>
+        </header>
+        <section class="datos" aria-label="Datos de la cuenta">
+            <div><strong>Habitación:</strong> {{ cuenta.habitacion }}</div>
+            <div><strong>Voucher:</strong> {{ cuenta.voucher or '—' }}</div>
+            <div><strong>Titular:</strong> {{ cuenta.titular }}</div>
+            <div><strong>Fecha de emisión:</strong> {{ fecha_emision }}</div>
+        </section>
+        <table>
+            <thead>
+                <tr><th>Fecha</th><th>Producto</th><th>Cantidad</th><th class="numero">Precio unitario</th><th class="numero">Importe</th></tr>
+            </thead>
+            <tbody>
+                {% for consumo in consumos %}
+                <tr>
+                    <td>{{ consumo.fecha or '—' }}</td>
+                    <td>{{ consumo.item or '—' }}</td>
+                    <td>{{ consumo.cantidad or '—' }}</td>
+                    <td class="numero">{{ consumo.precio_unitario if consumo.precio_unitario else '—' }}</td>
+                    <td class="numero">$ {{ consumo.monto|importe_pase }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5">No hay bebidas confirmadas para esta cuenta.</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr><td colspan="4">TOTAL CONFIRMADO</td><td class="numero">$ {{ cuenta.bebidas|importe_pase }}</td></tr>
+            </tfoot>
+        </table>
+        <p class="nota">Solo se muestran consumos vigentes confirmados. Los registros con fecha no reconocida se muestran al final.</p>
+    </main>
+</body>
+</html>

@@ -30,6 +30,7 @@ Sistema web modular para la gestión integral de consumos del hotel con **Dashbo
 ✅ **Informe de consumos** consolidado por producto (pantalla y XLSX)  
 ✅ **Pase de turno** de recepción con planilla imprimible de pase de caja  
 ✅ **Listado diario de pasajeros alojados**  
+✅ **Control preventivo de cuentas** de bebidas de estadías activas, por habitación y voucher<br>
 ✅ **Reinicio de datos por CLI** con backup y confirmación (`reiniciar_datos.py`)  
 
 ---
@@ -356,10 +357,18 @@ Todas las exportaciones utilizan archivos temporales que:
 **5. Pase de Turno**
 - Ruta: `/pase-turno`
 - Formato: Informe de recepción con planilla imprimible de pase de caja
+- Cada cuenta de salida ofrece un comprobante individual no fiscal de bebidas confirmadas, imprimible desde «Ver detalle».
 
 **6. Listado de Pasajeros Alojados**
 - Ruta: `/listado-pasajeros-alojados`
 - Formato: Listado diario actualizado, imprimible
+
+**7. Control preventivo de cuentas**
+- Ruta: `/control-cuentas`, accesible desde Consumos y el listado de pasajeros.
+- Consulta de solo lectura de todas las estadías activas del hotel; no filtra por contingente.
+- Las cuentas se agrupan como en el pase de turno: habitación y voucher, con el primer pasajero como titular.
+- El número de habitación se compara como texto completo: sufijos de cama como `101 A` y `101 B` producen cuentas separadas, incluso si comparten voucher.
+- Solo suma bebidas vigentes vinculadas con seguridad. Las anuladas se conservan en el detalle; los registros dudosos se presentan para revisión. Los consumos de estadías inactivas se advierten cuando corresponden a una habitación ocupada.
 
 ---
 
