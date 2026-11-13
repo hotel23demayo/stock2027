@@ -2,7 +2,9 @@ from flask import Flask, abort, render_template, request, redirect, flash, send_
 import pandas as pd
 import os
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from io import BytesIO
+import math
 import sys
 import tempfile
 from core.informe_consumos import generar_consolidado_productos
@@ -309,32 +311,151 @@ def listado_pasajeros_alojados():
     )
 
 
+def obtener_datos_control_cuentas(fecha_referencia):
+    """Lee los archivos sin migrarlos y construye las cuentas activas."""
+    pasajeros = pd.read_csv(DB_PASAJEROS, dtype=str, keep_default_na=False)
+    consumos = pd.read_csv(DB_CONSUMOS, dtype=str, keep_default_na=False)
+    requeridas = (
+        (pasajeros, {'id_estadia', 'Nro. habitación', 'Apellido y nombre',
+                     'Fecha de ingreso', 'Fecha de egreso', 'Voucher'}, 'pasajeros'),
+        (consumos, {'id_estadia', 'habitacion', 'categoria', 'monto', 'estado'}, 'consumos'),
+    )
+    for tabla, columnas, nombre in requeridas:
+        faltantes = columnas - set(tabla.columns)
+        if faltantes:
+            raise ValueError(f"Faltan columnas de {nombre}: {', '.join(sorted(faltantes))}")
+    for tabla, columnas in ((pasajeros, COLUMNAS_PASAJEROS), (consumos, COLUMNAS_CONSUMOS)):
+        for columna in columnas:
+            if columna not in tabla.columns:
+                tabla[columna] = ''
+    return generar_control_cuentas(pasajeros, consumos, fecha_referencia)
+
+
+def error_control_cuentas(error):
+    app.logger.warning('No se pudo generar el control de cuentas: %s', error)
+    return render_template('control_cuentas.html', error=str(error)), 503
+
+
 @app.route('/control-cuentas')
 def control_cuentas():
     """Consulta de solo lectura de cuentas de estadías activas."""
+    ahora = datetime.now()
     try:
-        pasajeros = pd.read_csv(DB_PASAJEROS, dtype=str, keep_default_na=False)
-        consumos = pd.read_csv(DB_CONSUMOS, dtype=str, keep_default_na=False)
-        requeridas = (
-            (pasajeros, {'id_estadia', 'Nro. habitación', 'Apellido y nombre',
-                         'Fecha de ingreso', 'Fecha de egreso', 'Voucher'}, 'pasajeros'),
-            (consumos, {'id_estadia', 'habitacion', 'categoria', 'monto', 'estado'}, 'consumos'),
-        )
-        for tabla, columnas, nombre in requeridas:
-            faltantes = columnas - set(tabla.columns)
-            if faltantes:
-                raise ValueError(f"Faltan columnas de {nombre}: {', '.join(sorted(faltantes))}")
-        for tabla, columnas in ((pasajeros, COLUMNAS_PASAJEROS), (consumos, COLUMNAS_CONSUMOS)):
-            for columna in columnas:
-                if columna not in tabla.columns:
-                    tabla[columna] = ''
-        ahora = datetime.now()
-        datos = generar_control_cuentas(pasajeros, consumos, ahora.date())
+        datos = obtener_datos_control_cuentas(ahora.date())
     except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError, ValueError) as error:
-        app.logger.warning('No se pudo generar el control de cuentas: %s', error)
-        return render_template('control_cuentas.html', error=str(error)), 503
-
+        return error_control_cuentas(error)
     return render_template('control_cuentas.html', datos=datos, fecha_emision=ahora)
+
+
+@app.route('/control-cuentas/detalle')
+def detalle_control_cuentas():
+    """Imprime una cuenta activa, independientemente de su fecha de salida."""
+    if 'habitacion' not in request.args or 'voucher' not in request.args:
+        abort(404)
+    ahora = datetime.now()
+    try:
+        datos = obtener_datos_control_cuentas(ahora.date())
+    except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError, ValueError) as error:
+        return error_control_cuentas(error)
+    cuenta = next(
+        (c for c in datos['cuentas']
+         if c['habitacion'] == request.args['habitacion'] and c['voucher'] == request.args['voucher']),
+        None
+    )
+    if cuenta is None:
+        abort(404)
+    consumos = sorted(
+        (c for c in cuenta['detalle'] if c['estado'].strip().lower() == 'vigente'),
+        key=fecha_consumo_para_orden,
+    )
+    return render_template(
+        'detalle_cuenta_pase.html', cuenta=cuenta, consumos=consumos,
+        fecha_emision=ahora.strftime('%d/%m/%Y %H:%M'),
+        volver_control=True, observaciones=len(datos['observaciones']),
+    )
+
+
+def valor_numerico_o_texto(valor):
+    """Conserva valores no numéricos para que puedan revisarse en el informe."""
+    try:
+        numero = Decimal(valor)
+        if numero.is_finite() and math.isfinite(float(numero)):
+            return float(numero)
+    except (InvalidOperation, ValueError, OverflowError):
+        pass
+    return valor
+
+
+def escribir_fila_excel(hoja, valores):
+    hoja.append(valores)
+    for celda in hoja[hoja.max_row]:
+        if isinstance(celda.value, str):
+            celda.data_type = 's'
+
+
+@app.route('/control-cuentas/exportar.xlsx')
+def exportar_control_cuentas():
+    """Descarga el detalle y los totales de las cuentas activas."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.exceptions import IllegalCharacterError
+
+    ahora = datetime.now()
+    try:
+        datos = obtener_datos_control_cuentas(ahora.date())
+        libro = Workbook()
+        resumen = libro.active
+        resumen.title = 'Resumen'
+        escribir_fila_excel(resumen, ['CUENTAS ACTIVAS - INFORME NO FISCAL'])
+        escribir_fila_excel(resumen, [f"Emitido: {ahora.strftime('%d/%m/%Y %H:%M')}"])
+        cantidad_observaciones = len(datos['observaciones'])
+        if cantidad_observaciones:
+            mensaje = (
+                f"Hay {cantidad_observaciones} observaciones pendientes de revisión en Chequear Cuentas. "
+                "Los importes confirmados pueden estar incompletos"
+            )
+        else:
+            mensaje = "Sin observaciones pendientes. Importes confirmados según los registros disponibles"
+        escribir_fila_excel(resumen, [mensaje])
+        escribir_fila_excel(resumen, [])
+        escribir_fila_excel(resumen, ['Habitación', 'Voucher', 'Titular', 'Pasajeros', 'Subtotal confirmado'])
+
+        detalle = libro.create_sheet('Detalle')
+        escribir_fila_excel(detalle, [
+            'Habitación', 'Voucher', 'Titular', 'Pasajeros', 'ID estadía', 'Pasajero',
+            'Fecha', 'Producto', 'Cantidad', 'Precio unitario', 'Importe original',
+            'Estado', 'Importe confirmado',
+        ])
+        for cuenta in datos['cuentas']:
+            pasajeros = ', '.join(cuenta['pasajeros'])
+            identificacion = [cuenta['habitacion'], cuenta['voucher'], cuenta['titular'], pasajeros]
+            escribir_fila_excel(resumen, identificacion + [cuenta['bebidas']])
+            for consumo in cuenta['detalle']:
+                escribir_fila_excel(detalle, identificacion + [
+                    consumo['id_estadia'], consumo['pasajero'], consumo['fecha'], consumo['item'],
+                    valor_numerico_o_texto(consumo['cantidad']),
+                    valor_numerico_o_texto(consumo['precio_unitario']),
+                    valor_numerico_o_texto(consumo['monto']), consumo['estado'],
+                    consumo['monto_confirmado'],
+                ])
+        resumen.auto_filter.ref = f'A5:E{5 + len(datos["cuentas"])}'
+        escribir_fila_excel(resumen, ['TOTAL GENERAL', None, None, None, datos['total_bebidas']])
+        detalle.auto_filter.ref = f'A1:M{detalle.max_row}'
+        resumen.freeze_panes = 'A6'
+        detalle.freeze_panes = 'A2'
+        for hoja in (resumen, detalle):
+            for columna in range(1, hoja.max_column + 1):
+                hoja.column_dimensions[get_column_letter(columna)].width = 22
+        archivo = BytesIO()
+        libro.save(archivo)
+        archivo.seek(0)
+    except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError,
+            ValueError, TypeError, IllegalCharacterError) as error:
+        return error_control_cuentas(error)
+    return send_file(
+        archivo, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True, download_name=f'cuentas_activas_{ahora:%Y-%m-%d_%H%M}.xlsx',
+    )
 
 
 @app.route('/habitacion/<int:num_habitacion>')

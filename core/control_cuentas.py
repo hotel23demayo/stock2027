@@ -1,6 +1,6 @@
 """Consulta preventiva de cuentas, sin modificar los archivos operativos."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import pandas as pd
@@ -52,7 +52,7 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
     totales = dict(vinculacion['totales_por_estadia'])
     for identificador in repetidos:
         if identificador in totales:
-            totales[identificador] = 0.0
+            totales[identificador] = Decimal('0')
     for registro in vinculacion['pendientes'].to_dict('records'):
         observar('Consumo sin id_estadia', registro)
     for registro in vinculacion['inconsistencias'].to_dict('records'):
@@ -77,6 +77,18 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
             por_id[identificador] = fila
 
     habitaciones_activas = {clave_cuenta(fila)[0] for _, fila in activos.iterrows()}
+    periodos_por_habitacion = {}
+    for indice, fila in activos.iterrows():
+        habitacion = clave_cuenta(fila)[0]
+        periodos_por_habitacion.setdefault(habitacion, []).append(
+            (ingresos.loc[indice].date(), egresos.loc[indice].date())
+        )
+    habitaciones_fechas_invalidas = {
+        clave_cuenta(fila)[0]
+        for _, fila in pasajeros.loc[
+            ingresos.isna() | egresos.isna() | (ingresos > egresos)
+        ].iterrows()
+    }
     ids_activos = set(activos['id_estadia'].str.strip())
     ids_duplicados_activos = set(vinculacion['estadias_duplicadas']['id_estadia'].str.strip())
     anulados = []
@@ -93,7 +105,23 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
             continue
         if identificador not in por_id:
             if habitacion in habitaciones_activas and identificador:
-                observar('Consumo de una estadía no activa en habitación ocupada', consumo)
+                fecha_consumo = None
+                for formato in ('%d/%m/%Y %H:%M', '%d/%m/%Y',
+                                '%Y-%m-%d', '%Y-%m-%d %H:%M:%S'):
+                    try:
+                        fecha_consumo = datetime.strptime(consumo['fecha'].strip(), formato).date()
+                        break
+                    except ValueError:
+                        continue
+                periodos = periodos_por_habitacion[habitacion]
+                if fecha_consumo is not None and any(
+                    ingreso < fecha_consumo <= egreso for ingreso, egreso in periodos
+                ):
+                    observar('Consumo de otra estadía durante el alojamiento actual', consumo)
+                elif not (fecha_consumo is not None
+                          and habitacion not in habitaciones_fechas_invalidas
+                          and all(fecha_consumo < ingreso for ingreso, _ in periodos)):
+                    observar('Consumo de origen no verificable', consumo)
             elif habitacion in habitaciones_activas and estado == 'anulado':
                 observar('Consumo anulado sin id_estadia', consumo)
             continue
@@ -101,6 +129,7 @@ def generar_control_cuentas(pasajeros, consumos, fecha_referencia=None):
             if habitacion != clave_cuenta(por_id[identificador])[0]:
                 observar('Consumo anulado con habitación inconsistente', consumo)
             else:
+                consumo['monto_confirmado'] = Decimal('0')
                 anulados.append(consumo)
 
     detalles = {}

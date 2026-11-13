@@ -42,6 +42,7 @@
         <p class="alerta" role="alert">No se pudo generar el control de cuentas: {{ error }}</p>
         {% else %}
         <p>Estadías activas del hotel · Emisión: {{ fecha_emision.strftime('%d/%m/%Y %H:%M') }}</p>
+        <nav class="acciones"><a href="{{ url_for('exportar_control_cuentas') }}">Descargar cuentas actuales (Excel)</a></nav>
         <section class="resumen" aria-label="Resumen general">
             <div class="indicador"><strong>{{ datos.total_habitaciones }}</strong>Habitaciones ocupadas</div>
             <div class="indicador"><strong>{{ datos.cuentas|length }}</strong>Cuentas identificadas</div>
@@ -57,6 +58,7 @@
         <section class="cuenta">
             <h3>Habitación {{ cuenta.habitacion }} · Voucher {{ cuenta.voucher }} · {{ cuenta.titular }}</h3>
             <p>Pasajeros ({{ cuenta.pasajeros|length }}): {{ cuenta.pasajeros|join(', ') }}</p>
+            <p><a href="{{ url_for('detalle_control_cuentas', habitacion=cuenta.habitacion, voucher=cuenta.voucher) }}">Imprimir detalle individual</a></p>
             <p>
                 Consumos: {{ cuenta.unidades }} unidades vigentes{% if cuenta.unidades_incompletas %} (cantidad incompleta; revisar observaciones){% endif %}
                 · <strong>Importe confirmado: {{ dinero(cuenta.bebidas) }}</strong>
@@ -90,7 +92,7 @@
         {% if datos.observaciones %}
         <section>
             <h2>Observaciones para revisión</h2>
-            <p>Los consumos de estadías no activas se muestran cuando figuran en una habitación actualmente ocupada; el resto permanece en el historial.</p>
+            <p>Los consumos de otra estadía durante el alojamiento actual requieren revisión. Si no puede establecerse la relación temporal, su origen no es verificable. Sin hora de ingreso, el mismo día puede ser ambiguo. Ninguno se atribuye a la cuenta actual.</p>
             <div class="tabla"><table>
                 <thead><tr><th>Motivo</th><th>Habitación</th><th>Pasajero</th><th>ID estadía</th><th>ID consumo</th><th>Fecha</th><th>Producto</th><th>Importe</th><th>Estado</th></tr></thead>
                 <tbody>
