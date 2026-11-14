@@ -2,6 +2,8 @@
 
 Solo diseño, sin código. Complementa [ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md](./ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md).
 
+> **Vigencia:** representa el modelo conceptual propuesto y no el esquema persistente de la aplicación actual. El estado implementado se describe en el [README del proyecto](../README.md).
+
 ## Flujo en capas
 
 ```text

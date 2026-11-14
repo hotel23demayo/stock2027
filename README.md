@@ -17,14 +17,14 @@ Sistema web modular para la gestión integral de consumos del hotel con **Dashbo
 ✅ **Cambio de habitación** por desperfectos con traspaso automático de consumos  
 ✅ **Consumos de último momento** antes del checkout  
 ✅ **Selección inteligente de titulares** (mayor de edad del grupo familiar)  
-✅ **Fichas individuales por habitación** con CRUD completo de consumos  
+✅ **Fichas individuales por habitación** para registrar, consultar y anular consumos<br>
 ✅ **Sistema flexible de consumos** (todos los pasajeros pueden comprar cualquier producto)  
 ✅ **Generación de Excel consolidado** con formato salidas.xlsx  
 ✅ **Carga de archivos CSV** con modo dual (agregar/reemplazar)  
 ✅ **Backups automáticos** al subir nuevos archivos de pasajeros  
 ✅ **Descargas temporales** sin almacenamiento persistente de exportaciones  
 ✅ **Consulta de consumos centralizada** en el header del dashboard  
-✅ **Identidad de estadías** (`id_estadia`): cada cuenta de consumos pertenece a una estadía, no a un número de habitación  
+✅ **Identidad de estadías** (`id_estadia`): cada consumo se vincula a una estadía, no solo al número de habitación<br>
 ✅ **Bebidas rápidas** con catálogo de productos (`data/catalogo_productos.csv`)  
 ✅ **Anulación de consumos** conservando el registro (nunca se borran)  
 ✅ **Informe de consumos** consolidado por producto (pantalla y XLSX)  
@@ -32,6 +32,15 @@ Sistema web modular para la gestión integral de consumos del hotel con **Dashbo
 ✅ **Listado diario de pasajeros alojados**  
 ✅ **Control preventivo de cuentas** de bebidas de estadías activas, por habitación y voucher<br>
 ✅ **Reinicio de datos por CLI** con backup y confirmación (`reiniciar_datos.py`)  
+
+### Pendiente funcional
+
+- **Procedencia en el informe de consumos:** el informe actual filtra por fecha del consumo y consolida por producto; no informa sede ni permite filtrar por fechas de estadía. El padrón guarda la sede y cada consumo tiene un `id_estadia`, pero el informe todavía no cruza esos datos. Para conservar la procedencia después del checkout, habrá que guardar la sede junto al consumo o mantener un historial de estadías. El micro tampoco se registra hoy; si se necesita incluirlo, debe capturarse como dato del contingente. El detalle está en [CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md](CONSUMOS_INDIVIDUALES_IMPLEMENTADO.md).
+
+### Estado de la documentación
+
+- Este README resume el sistema operativo actual. Los documentos `*_IMPLEMENTADO.md` describen implementaciones concretas, pero pueden conservar detalles de etapas anteriores; ante una discrepancia, prevalecen el código y este README.
+- Los documentos de arquitectura, modelos y plan en [docs/](docs/) conservan propuestas de diseño, no una descripción de funcionalidades ya construidas.
 
 ---
 
@@ -246,7 +255,7 @@ El sistema detecta automáticamente los checkouts del día comparando la fecha d
 - Acceso desde el dashboard con botón "Checkout Masivo"
 - Preview con lista completa de habitaciones y consumos
 - Confirmación única para procesar todos los checkouts simultáneamente
-- Elimina todos los registros y consumos del día en una operación
+- Retira del padrón los pasajeros con checkout pendiente; los consumos se conservan en el historial
 - Ideal para temporada alta con contingentes
 
 **3. Checkout Anticipado**
@@ -264,9 +273,9 @@ El sistema detecta automáticamente los checkouts del día comparando la fecha d
    - Indicador de checkout normal o anticipado
    - Desglose de consumos por categoría
    - Totales individuales
-4. **Confirmación**: Advertencia de que el proceso eliminará el registro
+4. **Confirmación**: Advertencia de que el proceso retirará al pasajero del padrón activo
 5. **Generación Excel**: Se crea archivo temporal con el formato salidas.xlsx
-6. **Limpieza**: Se elimina el pasajero de pasajeros.csv y sus consumos
+6. **Limpieza**: Se retiran del padrón los pasajeros que egresan; los consumos asociados permanecen en `consumos_diarios.csv`
 
 ### Checkout Consolidado
 
@@ -503,7 +512,7 @@ pip install -r requirements.txt
 - ✅ **Historial permanente**: los consumos se anulan (`estado=anulado`), no se borran
 - ✅ **Validaciones**: Verificación de formato CSV, fechas y habitaciones
 - ✅ **Archivos temporales**: Exportaciones no persisten en el servidor
-- ⚠️ **Importante**: Los checkouts eliminan registros de forma permanente (backup recomendado)
+- ✅ **Checkout**: retira pasajeros del padrón activo y conserva los consumos como historial. El padrón de pasajeros no se archiva automáticamente al hacer checkout.
 
 ---
 
@@ -539,7 +548,7 @@ pip install -r requirements.txt
 - ➕ **Dashboard de 53 habitaciones** con estados visuales en tiempo real
 - ➕ **Detección automática de checkouts** con indicadores rojos pulsantes
 - ➕ **Fichas individuales** con información completa del pasajero
-- ➕ **CRUD completo de consumos** (agregar, ver, eliminar)
+- ➕ **Gestión de consumos** (registro, consulta y eliminación; actualmente los consumos se anulan y conservan)
 - ➕ **Sistema de checkout** con generación de Excel individual
 - ➕ **Checkout consolidado** para múltiples salidas del mismo día
 - ➕ **Gestión de archivos CSV** con carga flexible (cualquier nombre)

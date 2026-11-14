@@ -1,24 +1,24 @@
 # Implementación: Checkout Masivo para Contingentes
 
+> **Estado vigente (noviembre de 2026):** el checkout elimina del padrón activo las filas de pasajeros que egresan, pero **no borra ni marca como pagados los consumos**. Los consumos quedan en `consumos_diarios.csv` como historial. Esta nota reemplaza las descripciones anteriores de eliminación de consumos.
+
 ## ✅ Implementado con Éxito
 
 ### Características Implementadas:
 
 #### 1. **Checkout Masivo del Contingente** 🚪
-- Botón en el dashboard que aparece solo cuando hay habitaciones con checkout hoy
+- Acceso desde el dashboard cuando hay checkouts pendientes
 - Vista previa con resumen detallado antes de confirmar
-- Procesa TODAS las habitaciones con `fecha_egreso = hoy` en un solo click
+- Procesa las estadías cuyo ingreso y egreso son hoy o fechas anteriores
 
 #### 2. **Checkout Individual** (Sin cambios) 👤
 - Mantiene el proceso manual para reservas express
 - Click en habitación → Ver resumen → Confirmar checkout
 
 #### 3. **Gestión de Consumos** 💰
-- **Al hacer checkout (masivo o individual):**
-  - ✅ Los consumos se consideran **PAGADOS**
-  - ✅ Se **eliminan** del archivo `consumos_diarios.csv`
-  - ✅ La habitación queda con **saldo en $0**
-  - ✅ Lista para recibir nuevos huéspedes con nuevo rooming
+- El resumen presenta los consumos de la estadía antes de confirmar.
+- El checkout no cambia su estado ni los elimina; el archivo conserva el historial.
+- Una nueva estadía en esa habitación no hereda esos consumos porque se identifica por `id_estadia`.
 
 ---
 
@@ -31,20 +31,20 @@ Día 1: Carga masiva de rooming desde CSV
        ↓
 Días 2-5: Registro de consumos individuales por habitación
           ↓
-Día 5 (00:00hs): Sistema detecta fecha_egreso = hoy
+Día 5: Sistema detecta checkout pendiente (egreso hoy o vencido)
                  Habitaciones se marcan en ROJO
                  ↓
 Recepcionista: Click en "Checkout Masivo Contingente"
                ↓
 Sistema muestra: - 40+ habitaciones
-                 - Total de consumos (pagados)
+                 - Total registrado de consumos
                  - Confirmación de acción
                  ↓
 Recepcionista: Confirma con 1 click
                ↓
-Sistema: • Elimina TODOS los pasajeros con egreso = hoy
-         • Elimina TODOS los consumos (pagados)
-         • Habitaciones quedan disponibles en $0
+Sistema: • Retira del padrón los pasajeros con checkout pendiente
+         • Conserva todos los consumos históricos
+         • Habitaciones quedan disponibles para nuevas estadías
          ↓
 Listo para nuevo rooming ✅
 ```
@@ -58,7 +58,7 @@ Estadía: 2-3 días (fecha flexible)
          ↓
 Checkout: Manual e individual desde la habitación
           ↓
-Sistema: Elimina pasajero y consumos de esa habitación específica
+Sistema: Retira del padrón activo al pasajero; conserva sus consumos históricos
 ```
 
 ---
@@ -68,7 +68,7 @@ Sistema: Elimina pasajero y consumos de esa habitación específica
 ### 1. `app.py`
 - ✅ Ruta `/checkout-masivo` - Vista previa del checkout
 - ✅ Ruta `/checkout-masivo/confirmar` - Procesa el checkout masivo
-- ✅ Actualizada función `confirmar_checkout()` - Comenta que consumos son pagados
+- ✅ `confirmar_checkout()` conserva los consumos históricos
 
 ### 2. `templates/checkout_masivo.html` (NUEVO)
 - ✅ Pantalla de confirmación con tabla detallada
@@ -78,7 +78,7 @@ Sistema: Elimina pasajero y consumos de esa habitación específica
 
 ### 3. `templates/dashboard.html`
 - ✅ Botón "Checkout Masivo Contingente" con animación pulsante
-- ✅ Aparece solo cuando hay checkouts programados para hoy
+- ✅ Aparece cuando hay checkouts pendientes
 
 ---
 
@@ -89,30 +89,31 @@ Sistema: Elimina pasajero y consumos de esa habitación específica
    - Confirmación JavaScript antes de ejecutar
 
 ✅ **Validaciones:**
-   - Verifica que existan habitaciones con checkout hoy
+   - Verifica que existan habitaciones con checkout pendiente
    - Maneja errores de lectura/escritura de archivos
    - Mensajes claros de éxito/error
 
-✅ **Irreversible:**
-   - La acción NO se puede deshacer
+✅ **Confirmación y seguridad:**
+   - La acción NO se puede deshacer desde la aplicación
    - Alerta clara en pantalla
-   - Recomendación implícita de backup
+   - Se recomienda realizar backups periódicos de los datos
+   - El checkout no genera un backup propio
 
 ---
 
 ## Respuestas a tus Preguntas
 
 ### ¿Qué pasa con los consumos?
-✅ **Se consideran PAGADOS** y se eliminan del sistema
+✅ Se conservan en `consumos_diarios.csv`; el checkout no registra un estado de pago.
 
 ### ¿La habitación queda en cero?
-✅ **SÍ**, queda con saldo $0 y disponible
+✅ La nueva estadía comienza sin consumos anteriores, ya que el sistema los filtra por `id_estadia`.
 
 ### ¿Lista para nuevo rooming?
 ✅ **SÍ**, puedes cargar inmediatamente el nuevo CSV con el siguiente contingente
 
-### ¿Los checkouts individuales también eliminan consumos?
-✅ **SÍ**, mismo comportamiento: consumos pagados → eliminados → habitación en $0
+### ¿Los checkouts individuales también conservan consumos?
+✅ **SÍ**, se conserva el historial y se retira al pasajero del padrón activo.
 
 ---
 
@@ -121,23 +122,9 @@ Sistema: Elimina pasajero y consumos de esa habitación específica
 1. ⚡ **Velocidad**: 40+ checkouts en 2 clicks vs 80+ clicks individuales
 2. 📊 **Transparencia**: Resumen completo antes de ejecutar
 3. 🔄 **Flexibilidad**: Contingentes (masivo) + Express (individual)
-4. 💾 **Limpieza**: Archivos limpios, sin acumulación de datos históricos
+4. 💾 **Historial**: Los consumos permanecen disponibles después del checkout
 5. 🎯 **Operativa real**: Diseñado para tu flujo de trabajo con contingentes
 
 ---
 
-## Próximos Pasos Sugeridos (Opcional)
-
-1. **Exportar reporte antes de checkout masivo**:
-   - CSV con el detalle de habitaciones y consumos
-   - Para auditoría o contabilidad
-
-2. **Historial de checkouts**:
-   - Guardar en archivo separado los checkouts realizados
-   - Con fecha, habitación, pasajero, consumos totales
-
-3. **Backup automático**:
-   - Antes de checkout masivo, guardar copia de `pasajeros.csv` y `consumos_diarios.csv`
-   - En carpeta `backups/` con timestamp
-
-¿Quieres que implemente alguna de estas mejoras?
+El checkout no archiva automáticamente las filas de pasajeros retiradas ni crea un backup. Los detalles de persistencia y reinicio se documentan en [data/README.md](data/README.md) y [REINICIO_DATOS.md](REINICIO_DATOS.md).

@@ -4,6 +4,8 @@ Estado: **propuesta para aprobación. No se escribe código hasta que sea aproba
 Parte de [PLAN_IMPLEMENTACION_v1.md](./PLAN_IMPLEMENTACION_v1.md) (Etapa 0) y [MODELO_LOGICO_v1.1.md](./MODELO_LOGICO_v1.1.md).
 Esta etapa construye **el cerebro interno**, sin interfaz de negocio. `legacy/` no se modifica.
 
+> **Vigencia:** esta etapa sigue siendo una propuesta; no describe la arquitectura implementada en la aplicación actual. Consultar el [README del proyecto](../README.md) para conocer el sistema operativo.
+
 ## 1. Alcance
 
 **Entra:** estructura del proyecto; base SQLite con el esquema del modelo v1.1; acceso a datos con transacciones; autenticación y sesiones; permisos por perfil; auditoría; backup local con verificación; configuración; marco de pruebas; ingreso y un inicio mínimo.

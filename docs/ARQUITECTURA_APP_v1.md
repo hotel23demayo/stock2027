@@ -3,6 +3,8 @@
 Estado: **borrador v1.1 — incorpora las decisiones de §17**. Etapa de diseño: no incluye código, SQL, migraciones ni cambios en Python/HTML.
 Parte de [MODELO_LOGICO_v1.md](./MODELO_LOGICO_v1.md) (aprobado). Las entidades se nombran como en ese documento.
 
+> **Vigencia:** este documento describe una arquitectura objetivo, no la aplicación actualmente implementada. Para el estado operativo y sus diferencias con esta propuesta, consultar el [README del proyecto](../README.md).
+
 ## 1. Principios
 
 1. **La complejidad está en el sistema, no en el mostrador.** Recepción nunca ve tablas, IDs, movimientos, transacciones ni el origen AUTO/MANUAL.
