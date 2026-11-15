@@ -27,7 +27,7 @@ CONSUMOS_COLUMNS = [
 ]
 
 
-CANTIDADES_RAPIDAS = [1, 2, 3, 4, 6]
+CANTIDADES_RAPIDAS = [1, 2, 3, 4, 5, 6]
 RUTA_CATALOGO_PRODUCTOS = (
     Path(__file__).resolve().parent.parent
     / 'data'
@@ -39,9 +39,11 @@ ICONOS_CATEGORIA = {
     'gaseosas': '🥤',
     'aguas': '💧',
     'saborizadas': '🧃',
+    'aguas_saborizadas': '🧃',
     'cervezas': '🍺',
     'vinos': '🍷',
     'cafetería': '☕',
+    'cafeteria': '☕',
 }
 
 

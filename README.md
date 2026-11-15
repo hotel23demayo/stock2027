@@ -117,8 +117,10 @@ El dashboard utiliza colores intuitivos para identificar el estado de cada habit
 
 - **Habitación Vacía (gris)** → Click directo a Reserva Express con habitación pre-seleccionada
 - **Habitación Reservada (azul)** → Permite venta Express con advertencia de ingreso futuro
-- **Habitación Ocupada** → Abre ficha detallada con consumos
-- **Habitación Checkout (roja)** → Permite consumos de último momento antes del checkout
+- **Habitación Ocupada** → Abre la carga de bebidas para sus pasajeros; desde allí se accede a la ficha
+- **Habitación Checkout (roja)** → Abre la carga de bebidas y ofrece acceso al checkout
+
+La pestaña **Consumos** mantiene la carga general para todas las habitaciones ocupadas. En ambas vistas cada bebida se registra para la estadía seleccionada.
 
 ---
 
@@ -220,8 +222,8 @@ Cada habitación tiene una vista detallada que muestra:
 
 ### Gestión de Consumos
 - **Ver consumos**: Lista completa con fecha, categoría, detalle y monto
-- **Agregar consumo**: Formulario con categoría, detalle y monto
-- **Eliminar consumo**: Botón individual por cada registro
+- **Cargar bebidas**: Acceso a la pantalla de carga de la habitación
+- **Anular consumo**: Acción individual con motivo obligatorio; el registro permanece en el historial
 - **Totales**: Resumen por categoría y total general
 
 ### Categorías de Consumos
@@ -267,7 +269,7 @@ El sistema detecta automáticamente los checkouts del día comparando la fecha d
 ### Proceso de Checkout
 
 1. **Dashboard**: Las habitaciones de checkout aparecen en rojo pulsante
-2. **Click en habitación**: Se abre la ficha con botón "Procesar Checkout"
+2. **Click en habitación**: Se abre la carga de bebidas con acceso a "Procesar check-out" y a la ficha
 3. **Resumen**: Vista previa con:
    - Información del pasajero
    - Indicador de checkout normal o anticipado

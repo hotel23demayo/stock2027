@@ -176,25 +176,6 @@
             font-size: 0.9rem;
         }
 
-        .bebida-opcion,
-        .cantidad-rapida-btn {
-            border-radius: 12px;
-        }
-
-        .bebida-opcion.seleccionada,
-        .cantidad-rapida-btn.seleccionada {
-            box-shadow: inset 0 0 0 2px #0d6efd;
-            background: #e7f1ff;
-            color: #0d6efd;
-        }
-
-        .resumen-bebida-rapida {
-            background: #fff8e1;
-            border: 1px solid #ffe082;
-            border-radius: 10px;
-            padding: 12px 15px;
-            margin-top: 15px;
-        }
     </style>
 </head>
 <body>
@@ -246,6 +227,10 @@
                     <span class="info-label">Plazas ocupadas:</span>
                     <span class="info-value">{{ habitacion.pasajero.plazas }}</span>
                 </div>
+                <div class="info-row">
+                    <span class="info-label">Pasajeros:</span>
+                    <span class="info-value">{{ habitacion.todos_pasajeros|map(attribute='nombre')|join(', ') }}</span>
+                </div>
             </div>
             
             <!-- Botón de cambio de habitación -->
@@ -266,79 +251,14 @@
                 </div>
             </div>
 
-            <!-- Formulario para bebidas rápidas -->
             <div class="seccion-titulo">
                 🥤 Carga Rápida de Bebidas
             </div>
 
             <div class="form-agregar-consumo">
-                <form action="/habitacion/{{ habitacion.numero }}/agregar-bebida" method="POST" id="form-bebida-rapida">
-                        {% if habitacion.cantidad_pasajeros > 1 %}
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">👤 Pasajero</label>
-                            <select name="id_estadia" class="form-select" required>
-                                <option value="">Seleccionar pasajero...</option>
-                                {% for pasajero in habitacion.todos_pasajeros %}
-                                <option value="{{ pasajero.id_estadia }}">
-                                    {{ pasajero.nombre }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% else %}
-                        <input type="hidden"
-                            name="id_estadia"
-                            value="{{ habitacion.todos_pasajeros[0].id_estadia }}">
-                        {% endif %}
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Bebida</label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            {% for bebida in habitacion.catalogo_bebidas %}
-                            <button type="button"
-                                    class="btn btn-outline-primary bebida-opcion {% if not bebida.habilitado %}disabled{% endif %}"
-                                    data-producto="{{ bebida.codigo }}"
-                                    data-nombre="{{ bebida.nombre }}"
-                                    data-precio="{{ bebida.precio if bebida.precio is not none else '' }}"
-                                    {% if not bebida.habilitado %}disabled title="Precio pendiente de configurar"{% endif %}>
-                                <div>{{ bebida.icono }} {{ bebida.nombre }}</div>
-                                <small>
-                                    {% if bebida.habilitado %}
-                                    ${{ "%.0f"|format(bebida.precio) }}
-                                    {% else %}
-                                    Precio pendiente
-                                    {% endif %}
-                                </small>
-                            </button>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Cantidad rápida</label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            {% for cantidad in habitacion.cantidades_rapidas %}
-                            <button type="button" class="btn btn-outline-secondary cantidad-rapida-btn {% if loop.first %}seleccionada{% endif %}" data-cantidad="{{ cantidad }}">
-                                x{{ cantidad }}
-                            </button>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <input type="hidden" name="producto" id="producto-bebida-rapida">
-                    <input type="hidden" name="cantidad" id="cantidad-bebida-rapida" value="{{ habitacion.cantidades_rapidas[0] if habitacion.cantidades_rapidas else 1 }}">
-
-                    <div class="resumen-bebida-rapida" id="resumen-bebida-rapida">
-                        Seleccione una bebida para ver el total rápido.
-                    </div>
-
-                    <div class="d-grid mt-3">
-                        <button type="submit" class="btn btn-primary btn-lg" id="btn-submit-bebida" disabled>
-                            Agregar Bebida Rápida
-                        </button>
-                    </div>
-                    <small class="text-muted d-block mt-2">Si una bebida no tiene precio configurado, puede cargarla abajo de forma manual.</small>
-                </form>
+                <a href="{{ url_for('bebidas_rapidas', habitacion=habitacion.numero) }}" class="btn btn-primary btn-lg">
+                    Cargar bebidas
+                </a>
             </div>
 
                         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -533,60 +453,5 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const bebidaButtons = document.querySelectorAll('.bebida-opcion');
-        const cantidadButtons = document.querySelectorAll('.cantidad-rapida-btn');
-        const productoInput = document.getElementById('producto-bebida-rapida');
-        const cantidadInput = document.getElementById('cantidad-bebida-rapida');
-        const resumen = document.getElementById('resumen-bebida-rapida');
-        const submitButton = document.getElementById('btn-submit-bebida');
-
-        let bebidaSeleccionada = null;
-        let cantidadSeleccionada = Number(cantidadInput?.value || 1);
-
-        function actualizarResumenBebida() {
-            if (!resumen || !submitButton) {
-                return;
-            }
-
-            if (!bebidaSeleccionada) {
-                resumen.textContent = 'Seleccione una bebida para ver el total rápido.';
-                submitButton.disabled = true;
-                return;
-            }
-
-            const nombre = bebidaSeleccionada.dataset.nombre;
-            const precio = Number(bebidaSeleccionada.dataset.precio || 0);
-            const total = precio * cantidadSeleccionada;
-            resumen.textContent = `${cantidadSeleccionada} x ${nombre} = $${total.toLocaleString('es-AR')}`;
-            submitButton.disabled = false;
-        }
-
-        bebidaButtons.forEach((btn) => {
-            btn.addEventListener('click', () => {
-                bebidaButtons.forEach((item) => item.classList.remove('seleccionada'));
-                btn.classList.add('seleccionada');
-                bebidaSeleccionada = btn;
-                if (productoInput) {
-                    productoInput.value = btn.dataset.producto;
-                }
-                actualizarResumenBebida();
-            });
-        });
-
-        cantidadButtons.forEach((btn) => {
-            btn.addEventListener('click', () => {
-                cantidadButtons.forEach((item) => item.classList.remove('seleccionada'));
-                btn.classList.add('seleccionada');
-                cantidadSeleccionada = Number(btn.dataset.cantidad || 1);
-                if (cantidadInput) {
-                    cantidadInput.value = cantidadSeleccionada;
-                }
-                actualizarResumenBebida();
-            });
-        });
-
-        actualizarResumenBebida();
-    </script>
 </body>
 </html>

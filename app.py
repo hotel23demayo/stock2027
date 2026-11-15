@@ -1,4 +1,4 @@
-from flask import Flask, abort, render_template, request, redirect, flash, send_file
+from flask import Flask, abort, render_template, request, redirect, flash, send_file, url_for
 import pandas as pd
 import os
 from datetime import datetime
@@ -477,9 +477,6 @@ def ficha_habitacion(num_habitacion):
 
     # Verificar si es checkout hoy
     resumen['es_checkout_hoy'] = es_checkout_hoy(datos_pasajero['egreso'])
-    resumen['catalogo_bebidas'] = obtener_catalogo_bebidas()
-    resumen['cantidades_rapidas'] = CANTIDADES_RAPIDAS
-
     return render_template('ficha_habitacion.html', habitacion=resumen)
 
 @app.route('/habitacion/<int:num_habitacion>/agregar', methods=['POST'])
@@ -1485,7 +1482,20 @@ def cambiar_habitacion_parcial_route(num_habitacion):
 @app.route('/bebidas-rapidas', methods=['GET', 'POST'])
 def bebidas_rapidas():
     """Pantalla de carga masiva de bebidas asociadas a una estadía."""
-    from core.dashboard import obtener_todos_pasajeros_habitacion
+    from core.dashboard import es_checkout_hoy, obtener_todos_pasajeros_habitacion
+
+    habitacion_solicitada = request.args.get('habitacion')
+    habitacion_individual = None
+    if habitacion_solicitada is not None:
+        try:
+            habitacion_individual = int(habitacion_solicitada)
+            if habitacion_individual <= 0:
+                raise ValueError
+        except ValueError:
+            flash('Habitación inválida', 'danger')
+            return redirect(url_for('dashboard'))
+
+    destino = url_for('bebidas_rapidas', habitacion=habitacion_individual)
 
     if request.method == 'POST':
         habitacion = request.form.get('habitacion')
@@ -1497,13 +1507,17 @@ def bebidas_rapidas():
             habitacion = int(habitacion)
         except (TypeError, ValueError):
             flash('Habitación inválida', 'danger')
-            return redirect('/bebidas-rapidas')
+            return redirect(destino)
+
+        if habitacion_individual is not None and habitacion != habitacion_individual:
+            flash('La habitación no corresponde a la pantalla seleccionada', 'danger')
+            return redirect(destino)
 
         habitaciones_ocupadas = obtener_habitaciones_ocupadas()
 
         if habitacion not in habitaciones_ocupadas:
             flash('La habitación no está ocupada', 'danger')
-            return redirect('/bebidas-rapidas')
+            return redirect(destino)
 
         datos_estadia = validar_estadia_para_consumo(
             id_estadia,
@@ -1512,7 +1526,7 @@ def bebidas_rapidas():
 
         if not datos_estadia:
             flash('No se pudo validar la estadía seleccionada.', 'danger')
-            return redirect('/bebidas-rapidas')
+            return redirect(destino)
 
         exito, mensaje = agregar_consumo_bebida_rapida(
             habitacion,
@@ -1523,23 +1537,44 @@ def bebidas_rapidas():
         )
 
         flash(mensaje, 'success' if exito else 'danger')
-        return redirect('/bebidas-rapidas')
+        return redirect(destino)
 
     habitaciones_ocupadas = obtener_habitaciones_ocupadas()
     habitaciones = []
 
-    for num_habitacion in sorted(habitaciones_ocupadas.keys()):
+    if habitacion_individual is not None and habitacion_individual not in habitaciones_ocupadas:
+        flash(f'La habitación {habitacion_individual} no está ocupada actualmente', 'warning')
+        return redirect(url_for('dashboard'))
+
+    numeros_habitacion = (
+        [habitacion_individual] if habitacion_individual is not None
+        else sorted(habitaciones_ocupadas.keys())
+    )
+    for num_habitacion in numeros_habitacion:
         pasajeros = obtener_todos_pasajeros_habitacion(num_habitacion)
+
+        if habitacion_individual is not None:
+            pasajeros_validos = [
+                pasajero for pasajero in pasajeros
+                if validar_estadia_para_consumo(pasajero.get('id_estadia', ''), num_habitacion)
+            ]
+            if not pasajeros_validos:
+                flash(f'La habitación {num_habitacion} no tiene estadías válidas para cargar consumos.', 'warning')
+            elif len(pasajeros_validos) != len(pasajeros):
+                flash('Algunos pasajeros no tienen una estadía válida para cargar consumos.', 'warning')
+            pasajeros = pasajeros_validos
 
         habitaciones.append({
             'numero': num_habitacion,
             'pasajeros': pasajeros,
-            'titular': habitaciones_ocupadas[num_habitacion]['pasajero']
+            'titular': habitaciones_ocupadas[num_habitacion]['pasajero'],
+            'es_checkout_hoy': es_checkout_hoy(habitaciones_ocupadas[num_habitacion]['egreso'])
         })
 
     return render_template(
         'bebidas_rapidas.html',
         habitaciones=habitaciones,
+        habitacion_individual=habitacion_individual,
         catalogo_bebidas=obtener_catalogo_bebidas(),
         cantidades_rapidas=CANTIDADES_RAPIDAS
     )

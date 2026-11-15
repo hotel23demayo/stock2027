@@ -6,12 +6,19 @@ import pandas as pd
 
 from core.consumos import (
     agregar_consumo_bebida_rapida,
+    obtener_catalogo_bebidas,
     obtener_consumos_habitacion,
     obtener_total_consumos,
 )
 
 
 class TestConsumos(unittest.TestCase):
+
+    def test_iconos_de_cafe_y_aguas_saborizadas(self):
+        catalogo = {producto['codigo']: producto for producto in obtener_catalogo_bebidas()}
+        self.assertEqual(catalogo['ficha_cafe']['icono'], '☕')
+        self.assertEqual(catalogo['saborizada_manzana']['icono'], '🧃')
+        self.assertEqual(catalogo['saborizada_pomelo']['icono'], '🧃')
 
     def test_agregar_bebida_con_cantidad_y_precio_correctos(self):
         with tempfile.TemporaryDirectory() as tmp:
