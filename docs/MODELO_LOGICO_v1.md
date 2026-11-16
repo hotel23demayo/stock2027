@@ -3,6 +3,8 @@
 Estado: **APROBADO con ajustes (ver §11)**. Sin SQL, Python, HTML ni migraciones.
 Base: [ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md](./ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md) y [MODELO_DATOS_CONCEPTUAL_v1.md](./MODELO_DATOS_CONCEPTUAL_v1.md).
 
+> **Vigencia:** “aprobado” se refiere al diseño lógico propuesto; no significa que ese esquema SQLite esté implementado. Para el comportamiento del sistema actual, consultar el [README del proyecto](../README.md).
+
 ## 0. Decisiones de partida
 
 1. Persistencia interna en **SQLite**, invisible para el usuario. El CSV de rooming es solo entrada de importación.

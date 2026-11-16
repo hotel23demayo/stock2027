@@ -35,10 +35,11 @@ Archivo para registrar consumos de los pasajeros.
 id_consumo,id_estadia,fecha,habitacion,pasajero,categoria,item,cantidad,precio_unitario,monto,estado,fecha_anulacion,motivo_anulacion
 ```
 
-- `id_estadia` identifica la **cuenta de consumos**; el número de habitación es solo la ubicación física.
+- `id_estadia` identifica la estadía a la que pertenece el consumo; no equivale a una cuenta económica. El número de habitación es solo la ubicación física.
 - Un consumo sin `id_estadia` (histórico) **no se suma** a la cuenta de una estadía nueva; se conserva en el CSV y la ficha muestra una advertencia.
+- El consumo no guarda actualmente la `Sede` ni el micro de procedencia. Aunque el padrón incluye `Sede`, el checkout retira pasajeros del padrón activo, por lo que un informe histórico no puede recuperar siempre esa relación. La atribución por sede (y la eventual captura del micro) está pendiente; ver [README.md](../README.md).
 - Anular un consumo no lo borra: se marca `estado=anulado` con fecha y motivo.
-- El checkout no elimina consumos: el historial es permanente.
+- El checkout individual y masivo retira pasajeros del padrón activo, pero no elimina consumos: el historial permanece en `consumos_diarios.csv`.
 - En Chequear Cuentas, los consumos de otra estadía anteriores al ingreso de todos los ocupantes actuales se excluyen del control, sin sumarlos a sus cuentas; el historial completo se consulta en Ver consumos. Los posteriores al ingreso y dentro del alojamiento de algún ocupante se señalan para revisión. Como el padrón no registra la hora de ingreso, el mismo día puede ser ambiguo; si no se puede establecer la relación temporal, el origen no es verificable y tampoco se atribuye a la cuenta actual.
 - Chequear Cuentas permite imprimir el detalle informativo no fiscal de cada cuenta activa y descargar un Excel con el resumen y el detalle filtrable. El Excel muestra los anulados con importe confirmado cero; las observaciones se revisan en el control. Ninguna de estas consultas modifica los CSV originales.
 - Las columnas faltantes en archivos viejos se migran automáticamente al leer.
@@ -158,9 +159,7 @@ git checkout temporada-activos    # O temporada-jubilados
 
 ## 📊 Backups
 
-Los backups se crean automáticamente en `data/backups/` cuando:
-- Usas el script `cambiar_temporada.sh`
-- Procesas un check-out (se archiva el pasajero)
+Los backups se crean automáticamente en `data/backups/` en operaciones que reemplazan o reinician los datos. El checkout no crea un backup ni archiva automáticamente los pasajeros retirados del padrón.
 
 **Formato:**
 ```
@@ -183,4 +182,4 @@ reinicio_20261107_093000/        # generado por reiniciar_datos.py
 
 ---
 
-**Última actualización:** 3 de Noviembre 2026
+**Última actualización:** 14 de Noviembre 2026

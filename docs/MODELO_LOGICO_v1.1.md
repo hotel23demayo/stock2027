@@ -3,6 +3,8 @@
 Estado: **v1.1 — incorpora los ajustes de ARQUITECTURA_APP_v1 §18 y las decisiones posteriores (ver §13)**. Reemplaza a [MODELO_LOGICO_v1.md](./MODELO_LOGICO_v1.md), que se conserva como referencia. Sin SQL, Python, HTML ni migraciones.
 Base: [ARQUITECTURA_APP_v1.md](./ARQUITECTURA_APP_v1.md), [ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md](./ANALISIS_MATRIZ_RESERVA_Y_CUENTAS.md) y [MODELO_DATOS_CONCEPTUAL_v1.md](./MODELO_DATOS_CONCEPTUAL_v1.md).
 
+> **Vigencia:** esta versión documenta el diseño objetivo y no es una descripción del esquema CSV/Flask desplegado actualmente. Consultar el [README del proyecto](../README.md) para el estado operativo.
+
 ## 0. Decisiones de partida
 
 1. Persistencia interna en **SQLite**, invisible para el usuario. El CSV de rooming es solo entrada de importación.

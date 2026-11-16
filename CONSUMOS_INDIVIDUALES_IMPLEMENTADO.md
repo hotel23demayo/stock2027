@@ -1,10 +1,12 @@
 # Sistema de Consumos Individuales por Pasajero
 
+> **Estado vigente (noviembre de 2026):** este documento reúne decisiones de implementaciones de distintas etapas. La identidad efectiva de cada consumo es `id_estadia`, no el número de habitación ni el voucher por sí solos. El checkout retira pasajeros del padrón activo, pero conserva sus consumos. El informe actual filtra por fecha del consumo y consolida por producto; todavía no permite filtrar por estadía ni atribuye sede o micro.
+
 ## 📋 Resumen de Funcionalidad
 
 Se ha implementado un sistema completo de **consumos individuales por pasajero** que permite manejar correctamente las situaciones donde:
 
-- **Habitación con mismo voucher** (matrimonios/familias): Los consumos se cargan a cualquier miembro del grupo y se facturan de forma compartida.
+- **Habitación con mismo voucher** (matrimonios/familias): Se puede presentar un total unificado del grupo; cada registro de consumo conserva su identidad de estadía.
 - **Habitación con vouchers diferentes** (personas que no se conocen): Cada pasajero tiene su propia cuenta de consumos que se factura por separado.
 
 ---
@@ -16,7 +18,7 @@ Se ha implementado un sistema completo de **consumos individuales por pasajero**
 
 - Los consumos se pueden cargar a cualquiera de los dos
 - El sistema muestra una cuenta unificada
-- Al hacer checkout, se cobra un total general para toda la familia
+- El resumen puede presentar los consumos del grupo de forma unificada
 
 ### Caso 2: Habitación con Personas Desconocidas (Vouchers Diferentes)
 **Ejemplo:** Habitación 103 (testJubis.csv) - 2 personas con vouchers 30188715 y 30188714
@@ -192,12 +194,12 @@ Esta lógica se aplica en:
 
 ---
 
-## 🚀 Próximos Pasos Sugeridos
+## 📌 Pendiente registrado
 
-1. **Agregar campo de "Almuerzo"** para PENSIÓN COMPLETA (testJubis.csv)
-2. **Exportar resumen de checkout** con consumos separados por pasajero
-3. **Reportes de consumos** agrupados por voucher o por pasajero
-4. **Estadísticas** de consumo promedio por tipo de pasajero
+- Incorporar la sede de procedencia al informe de consumos, vinculando los registros por `id_estadia` con la sede correspondiente. Como el padrón activo se depura al hacer checkout, la solución debe conservar la sede en el consumo o mantener un historial de estadías.
+- Definir si también se capturará el micro del contingente y se incluirá en el informe.
+
+El informe vigente ya consolida consumos por producto en pantalla y Excel; todavía no ofrece desglose por voucher, pasajero, sede ni micro.
 
 ---
 
@@ -206,7 +208,7 @@ Esta lógica se aplica en:
 - El sistema **NO modifica** la lógica de titular por edad
 - El titular sigue siendo el de mayor edad para efectos administrativos
 - Los consumos se pueden cargar a cualquier pasajero independientemente de quién sea el titular
-- Al hacer checkout, se eliminan TODOS los pasajeros de la habitación y TODOS sus consumos
+- Al hacer checkout, se retiran del padrón activo los pasajeros que egresan; los consumos no se eliminan y permanecen en el historial
 - El archivo consumos_diarios.csv ya tenía el campo "pasajero" - ahora se usa completamente
 
 ### ✈️ Checkout para Jubilados (Traslado Incluido)

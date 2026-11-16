@@ -319,6 +319,14 @@
 </head>
 <body>
     <div class="container-fluid">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        {% endwith %}
         <!-- Header con estadísticas -->
         <div class="dashboard-header">
             <div class="dashboard-heading mb-3">
@@ -481,7 +489,7 @@
                     {% set clase_estado = 'habitacion-' + estado|replace('_', '-') %}
                     {% set es_checkout = num_hab in checkouts_hoy %}
                     
-                    <a href="{% if estado == 'vacia' %}/reserva-express?habitacion={{ num_hab }}{% elif estado == 'reservada' %}/reserva-express?habitacion={{ num_hab }}&reserva_futura=1{% else %}/habitacion/{{ num_hab }}{% endif %}" 
+                    <a href="{% if estado == 'vacia' %}/reserva-express?habitacion={{ num_hab }}{% elif estado == 'reservada' %}/reserva-express?habitacion={{ num_hab }}&reserva_futura=1{% else %}/bebidas-rapidas?habitacion={{ num_hab }}{% endif %}"
                        class="habitacion-card {{ clase_estado }}">
                         {% if es_checkout %}
                             <span class="badge-checkout">✓</span>

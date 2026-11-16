@@ -4,6 +4,8 @@ Estado: **borrador para revisión. No se escribe código hasta que este plan sea
 Base aprobada: [MODELO_LOGICO_v1.1.md](./MODELO_LOGICO_v1.1.md) y [ARQUITECTURA_APP_v1.md](./ARQUITECTURA_APP_v1.md).
 Sin código, SQL ni migraciones en este documento.
 
+> **Vigencia:** este plan es una propuesta de implementación del modelo objetivo; no representa el avance real del sistema. Algunas funciones ya existen en la aplicación legacy y otras decisiones del plan no se han implementado. Para el estado vigente, consultar el [README del proyecto](../README.md).
+
 ## 1. Reglas que gobiernan todo el plan
 
 1. **Una importación es una fuente de novedades y diferencias, nunca una orden de borrar historia.** Un pasajero ausente en una nueva importación se conserva y queda marcado para revisión, sin afectar sus estadías, cuentas ni consumos.

@@ -15,7 +15,7 @@
             max-width: 1400px;
             margin: 0 auto;
         }
-        .header-box, .room-card, .legend-box {
+        .header-box, .room-card {
             background: white;
             border-radius: 16px;
             box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
@@ -23,21 +23,6 @@
         .header-box {
             padding: 24px;
             margin-bottom: 24px;
-        }
-        .legend-box {
-            padding: 18px;
-            margin-bottom: 24px;
-        }
-        .legend-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-        }
-        .legend-item {
-            border: 1px solid #e9ecef;
-            border-radius: 12px;
-            padding: 12px;
-            background: #f8f9fa;
         }
         .rooms-grid {
             display: grid;
@@ -62,6 +47,14 @@
             margin-bottom: 12px;
             background: #fcfdff;
         }
+        .passenger-heading {
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #f1f5f9;
+        }
+        .passenger-name {
+            font-size: 1.1rem;
+        }
         .quick-buttons {
             display: flex;
             gap: 8px;
@@ -70,6 +63,13 @@
         .quick-product,
         .quick-qty {
             border-radius: 10px;
+        }
+        .carga-general .quick-buttons {
+            gap: 5px;
+        }
+        .carga-general .quick-product {
+            padding: 0.2rem 0.4rem;
+            line-height: 1.3;
         }
         .quick-product.selected,
         .quick-qty.selected {
@@ -88,13 +88,20 @@
     </style>
 </head>
 <body>
-    <div class="wrapper">
+    <div class="wrapper{% if habitacion_individual is none %} carga-general{% endif %}">
         <div class="header-box d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h1 class="mb-1">Carga Rápida de Bebidas</h1>
-                <p class="text-muted mb-0">Pantalla pensada para servicios masivos. Cada pasajero tiene su propia botonera rápida.</p>
+                <h1 class="mb-1">Carga Rápida de Bebidas{% if habitacion_individual is not none %} - Habitación {{ habitacion_individual }}{% endif %}</h1>
+                <p class="text-muted mb-0">{% if habitacion_individual is not none %}Seleccione el pasajero y la bebida para esta habitación.{% else %}Pantalla pensada para servicios masivos. Cada pasajero tiene su propia botonera rápida.{% endif %}</p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
+                {% if habitacion_individual is not none %}
+                <a href="{{ url_for('ficha_habitacion', num_habitacion=habitacion_individual) }}" class="btn btn-primary btn-lg">Información de habitación</a>
+                <a href="{{ url_for('bebidas_rapidas') }}" class="btn btn-outline-primary btn-lg">Carga general de bebidas</a>
+                {% if habitaciones[0].es_checkout_hoy %}
+                <a href="{{ url_for('checkout', num_habitacion=habitacion_individual) }}" class="btn btn-danger btn-lg">Procesar check-out</a>
+                {% endif %}
+                {% endif %}
                 <a href="/dashboard" class="btn btn-outline-secondary btn-lg">Volver al Dashboard</a>
             </div>
         </div>
@@ -110,24 +117,6 @@
           {% endif %}
         {% endwith %}
 
-        <div class="legend-box">
-            <h5 class="mb-3">Precios configurados</h5>
-            <div class="legend-grid">
-                {% for bebida in catalogo_bebidas %}
-                <div class="legend-item">
-                    <div><strong>{{ bebida.icono }} {{ bebida.nombre }}</strong></div>
-                    <div class="text-muted small">
-                        {% if bebida.habilitado %}
-                        ${{ "%.0f"|format(bebida.precio) }} por unidad
-                        {% else %}
-                        Precio pendiente de configurar
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
         <div class="rooms-grid">
             {% for habitacion in habitaciones %}
             <div class="room-card">
@@ -140,14 +129,14 @@
                 </div>
 
                 {% for pasajero in habitacion.pasajeros %}
-                <form class="passenger-form bebida-masiva-form" method="POST" action="/bebidas-rapidas">
+                <form class="passenger-form bebida-masiva-form" method="POST" action="{{ url_for('bebidas_rapidas', habitacion=habitacion_individual) }}">
                     <input type="hidden" name="habitacion" value="{{ habitacion.numero }}">
                     <input type="hidden" name="id_estadia" value="{{ pasajero.id_estadia }}">
                     <input type="hidden" name="producto" class="producto-input">
                     <input type="hidden" name="cantidad" class="cantidad-input" value="{{ cantidades_rapidas[0] if cantidades_rapidas else 1 }}">
 
-                    <div class="mb-2">
-                        <strong>{{ pasajero.nombre }}</strong>
+                    <div class="passenger-heading mb-2">
+                        <strong class="passenger-name">{{ pasajero.nombre }}</strong>
                         {% if pasajero.edad %}<span class="text-muted small"> · {{ pasajero.edad }} años</span>{% endif %}
                     </div>
 
@@ -162,6 +151,11 @@
                                     data-precio="{{ bebida.precio if bebida.precio is not none else '' }}"
                                     {% if not bebida.habilitado %}disabled{% endif %}>
                                 {{ bebida.icono }} {{ bebida.nombre }}
+                                {% if bebida.habilitado %}
+                                <span>${{ bebida.precio|int if bebida.precio == bebida.precio|int else bebida.precio }}</span>
+                                {% else %}
+                                <span>Precio pendiente de configurar</span>
+                                {% endif %}
                             </button>
                             {% endfor %}
                         </div>
