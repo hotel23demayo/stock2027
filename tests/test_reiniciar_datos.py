@@ -35,7 +35,7 @@ class TestReiniciarDatos(unittest.TestCase):
             archivo_consumos=str(self.consumos), id_estadia='ESTADIA-1',
         )
         self.catalogo.write_text(
-            'codigo,producto,categoria,sector,precio_actual\nnampe_malbec,Nampe Malbec,vinos,Bar,6500\n',
+            'codigo,producto,categoria,sector,precio_actual\nprueba,Producto de prueba,gaseosas,Prueba,123\n',
             encoding='utf-8',
         )
 

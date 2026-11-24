@@ -63,9 +63,16 @@ def planificar(directorio_datos, mantener_pasajeros=False):
     plan = []
 
     ruta = directorio_datos / ARCHIVO_CONSUMOS
+    encabezado_anterior = _leer_encabezado(ruta) if ruta.exists() else None
+    encabezado_consumos = _encabezado_consumos()
+    if encabezado_anterior:
+        encabezado_consumos += [
+            columna for columna in encabezado_anterior
+            if columna not in encabezado_consumos
+        ]
     plan.append({
         'ruta': ruta,
-        'encabezado': _encabezado_consumos(),
+        'encabezado': encabezado_consumos,
         'filas': _contar_filas(ruta) if ruta.exists() else 0,
         'existe': ruta.exists(),
     })
@@ -93,29 +100,36 @@ def reiniciar(directorio_datos, mantener_pasajeros=False, simular=False, ahora=N
         había archivos existentes que respaldar.
     """
     directorio_datos = Path(directorio_datos)
-    plan = planificar(directorio_datos, mantener_pasajeros)
-
     if simular:
-        return plan, None
+        return planificar(directorio_datos, mantener_pasajeros), None
 
-    existentes = [item for item in plan if item['existe']]
-    carpeta_backup = None
+    from core.consumos import archivo_consumos_temporal, bloquear_consumos
 
-    if existentes:
-        marca = (ahora or datetime.now()).strftime('%Y%m%d_%H%M%S')
-        carpeta_backup = directorio_datos / 'backups' / f'reinicio_{marca}'
-        carpeta_backup.mkdir(parents=True, exist_ok=False)
-        for item in existentes:
-            shutil.copy2(item['ruta'], carpeta_backup / item['ruta'].name)
-        # El reinicio solo continúa si cada copia quedó completa.
-        for item in existentes:
-            copia = carpeta_backup / item['ruta'].name
-            if copia.stat().st_size != item['ruta'].stat().st_size:
-                raise RuntimeError(f'Backup incompleto de {item["ruta"].name}; no se modificó nada.')
+    ruta_consumos = directorio_datos / ARCHIVO_CONSUMOS
+    with bloquear_consumos(ruta_consumos):
+        plan = planificar(directorio_datos, mantener_pasajeros)
+        existentes = [item for item in plan if item['existe']]
+        carpeta_backup = None
 
-    for item in plan:
-        if item['encabezado']:
-            _escribir_encabezado(item['ruta'], item['encabezado'])
+        if existentes:
+            marca = (ahora or datetime.now()).strftime('%Y%m%d_%H%M%S')
+            carpeta_backup = directorio_datos / 'backups' / f'reinicio_{marca}'
+            carpeta_backup.mkdir(parents=True, exist_ok=False)
+            for item in existentes:
+                shutil.copy2(item['ruta'], carpeta_backup / item['ruta'].name)
+            # El reinicio solo continúa si cada copia quedó completa.
+            for item in existentes:
+                copia = carpeta_backup / item['ruta'].name
+                if copia.stat().st_size != item['ruta'].stat().st_size:
+                    raise RuntimeError(f'Backup incompleto de {item["ruta"].name}; no se modificó nada.')
+
+        for item in plan:
+            if item['encabezado']:
+                if item['ruta'] == ruta_consumos:
+                    with archivo_consumos_temporal(ruta_consumos) as archivo:
+                        csv.writer(archivo).writerow(item['encabezado'])
+                else:
+                    _escribir_encabezado(item['ruta'], item['encabezado'])
 
     return plan, carpeta_backup
 

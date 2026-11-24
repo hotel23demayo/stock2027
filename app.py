@@ -24,7 +24,9 @@ from core.consumos import (
     anular_consumo_por_id,
     obtener_historial_consumos,
     agregar_consumo_bebida_rapida,
+    agregar_consumos_bebidas_multiples,
     obtener_catalogo_bebidas,
+    ErrorCatalogo,
     CANTIDADES_RAPIDAS
 )
 from core.reserva_express import crear_reserva_express, obtener_habitaciones_disponibles, validar_datos_reserva
@@ -748,22 +750,11 @@ def cargar_consumo():
         flash(f'❌ La habitación {habitacion} no está registrada en el sistema', 'danger')
         return redirect('/')
 
-    # Registrar el consumo
-    nuevo_registro = {
-        'fecha': datetime.now().strftime('%d/%m/%Y %H:%M'),
-        'habitacion': habitacion,
-        'pasajero': nombre_pasajero,
-        'categoria': categoria,
-        'monto': float(monto)
-    }
-
-    # Guardar en el CSV
-    df_nuevo = pd.DataFrame([nuevo_registro])
-
-    if os.path.exists(DB_CONSUMOS):
-        df_nuevo.to_csv(DB_CONSUMOS, mode='a', header=False, index=False)
-    else:
-        df_nuevo.to_csv(DB_CONSUMOS, mode='w', header=True, index=False)
+    if not agregar_consumo(
+        habitacion, categoria, monto, nombre_pasajero, archivo_consumos=DB_CONSUMOS
+    ):
+        flash('No se pudo registrar el consumo', 'danger')
+        return redirect('/')
 
     flash(f'✅ Consumo registrado: {categoria} - ${monto} para {nombre_pasajero} (Hab. {habitacion})', 'success')
     return redirect('/')
@@ -1481,7 +1472,7 @@ def cambiar_habitacion_parcial_route(num_habitacion):
 
 @app.route('/bebidas-rapidas', methods=['GET', 'POST'])
 def bebidas_rapidas():
-    """Pantalla de carga masiva de bebidas asociadas a una estadía."""
+    """Carga bebidas; el lote usa campos repetidos producto, cantidad e id_estadia."""
     from core.dashboard import es_checkout_hoy, obtener_todos_pasajeros_habitacion
 
     habitacion_solicitada = request.args.get('habitacion')
@@ -1517,6 +1508,37 @@ def bebidas_rapidas():
 
         if habitacion not in habitaciones_ocupadas:
             flash('La habitación no está ocupada', 'danger')
+            return redirect(destino)
+
+        if request.form.get('modo') == 'carga_multiple':
+            productos = request.form.getlist('producto')
+            cantidades = request.form.getlist('cantidad')
+            estadias = request.form.getlist('id_estadia')
+            if (
+                not 1 <= len(productos) <= 3
+                or len(cantidades) != len(productos)
+                or len(estadias) != len(productos)
+                or any(not valor.strip() for valores in (productos, cantidades, estadias)
+                       for valor in valores)
+            ):
+                flash('Debe seleccionar entre 1 y 3 productos con cantidad y estadía.', 'danger')
+                return redirect(destino)
+
+            items = []
+            for codigo, cantidad_item, id_item in zip(productos, cantidades, estadias):
+                datos_item = validar_estadia_para_consumo(id_item.strip(), habitacion)
+                if not datos_item:
+                    flash('No se pudo validar la estadía seleccionada.', 'danger')
+                    return redirect(destino)
+                items.append({
+                    'producto_codigo': codigo,
+                    'cantidad': cantidad_item,
+                    'pasajero': datos_item['pasajero'],
+                    'id_estadia': datos_item['id_estadia'],
+                })
+
+            exito, mensaje = agregar_consumos_bebidas_multiples(habitacion, items)
+            flash(mensaje, 'success' if exito else 'danger')
             return redirect(destino)
 
         datos_estadia = validar_estadia_para_consumo(
@@ -1571,11 +1593,17 @@ def bebidas_rapidas():
             'es_checkout_hoy': es_checkout_hoy(habitaciones_ocupadas[num_habitacion]['egreso'])
         })
 
+    try:
+        catalogo_bebidas = obtener_catalogo_bebidas()
+    except ErrorCatalogo as error:
+        flash(str(error), 'danger')
+        catalogo_bebidas = []
+
     return render_template(
         'bebidas_rapidas.html',
         habitaciones=habitaciones,
         habitacion_individual=habitacion_individual,
-        catalogo_bebidas=obtener_catalogo_bebidas(),
+        catalogo_bebidas=catalogo_bebidas,
         cantidades_rapidas=CANTIDADES_RAPIDAS
     )
 

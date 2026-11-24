@@ -49,6 +49,11 @@ git checkout -b temporada-activos
 
 ## 🔄 Cambiar de Temporada
 
+Conserva el historial de consumos: no lo vacíes manualmente. El script
+automatizado indicado al final cambia de rama, intenta crear un commit y vacía
+los consumos después de respaldarlos; ejecútalo únicamente si se autoriza ese
+reinicio destructivo. Cierra la aplicación antes de cambiar de temporada.
+
 ### 📋 De JUBILADOS → ACTIVOS (Junio)
 
 ```bash
@@ -59,8 +64,7 @@ git commit -m "💾 Fin temporada jubilados Mayo 2026"
 # 2. Cambiar a temporada activos
 git checkout temporada-activos
 
-# 3. Limpiar datos anteriores
-echo "fecha,habitacion,pasajero,categoria,monto" > data/consumos_diarios.csv
+# 3. Preparar pasajeros conservando el historial de consumos
 rm data/pasajeros.csv  # O hacer backup
 # Cargar nuevo CSV de activos
 
@@ -78,8 +82,7 @@ git commit -m "💾 Fin temporada activos $(date +%B\ %Y)"
 # 2. Cambiar a temporada jubilados
 git checkout temporada-jubilados
 
-# 3. Limpiar datos anteriores  
-echo "fecha,habitacion,pasajero,categoria,monto" > data/consumos_diarios.csv
+# 3. Preparar pasajeros conservando el historial de consumos
 rm data/pasajeros.csv  # O hacer backup
 # Cargar nuevo CSV de jubilados
 

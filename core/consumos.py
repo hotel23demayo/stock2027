@@ -3,8 +3,14 @@ Módulo para gestionar operaciones de consumos individuales por habitación.
 """
 
 import pandas as pd
+import csv
+import fcntl
+import math
 import os
+import stat
+import tempfile
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pandas.errors import EmptyDataError
 from pathlib import Path
@@ -47,20 +53,98 @@ ICONOS_CATEGORIA = {
 }
 
 
+class ErrorCatalogo(ValueError):
+    """El catálogo de productos no está disponible o no es válido."""
+
+
+@contextmanager
+def bloquear_consumos(archivo_consumos):
+    """Serializa las operaciones cooperantes mediante un archivo estable."""
+    ruta = Path(archivo_consumos).resolve()
+    ruta_bloqueo = ruta.with_name(ruta.name + '.lock')
+    with ruta_bloqueo.open('a') as archivo:
+        fcntl.flock(archivo.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(archivo.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def archivo_consumos_temporal(archivo_consumos):
+    """Reemplaza el CSV al completar el temporal; el llamador debe tener el bloqueo."""
+    ruta = Path(archivo_consumos).resolve()
+    modo = stat.S_IMODE(ruta.stat().st_mode) if ruta.exists() else None
+    temporal = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', encoding='utf-8', newline='',
+            dir=ruta.parent, delete=False,
+        ) as archivo:
+            temporal = archivo.name
+            if modo is not None:
+                os.chmod(temporal, modo)
+            yield archivo
+        os.replace(temporal, ruta)
+        temporal = None
+    finally:
+        if temporal is not None:
+            os.unlink(temporal)
+
+
+def guardar_consumos_atomico(df, archivo_consumos):
+    """Escribe un DataFrame; el llamador debe haber adquirido el bloqueo."""
+    with archivo_consumos_temporal(archivo_consumos) as archivo:
+        df.to_csv(archivo, index=False)
+
+
 def obtener_catalogo_bebidas():
     """Lee el catálogo independiente de productos para la interfaz."""
     try:
-        df = pd.read_csv(RUTA_CATALOGO_PRODUCTOS)
-    except (FileNotFoundError, EmptyDataError):
-        print(f"No se pudo leer el catálogo: {RUTA_CATALOGO_PRODUCTOS}")
-        return []
+        with open(RUTA_CATALOGO_PRODUCTOS, encoding='utf-8-sig', newline='') as archivo:
+            lector = csv.reader(archivo, strict=True)
+            columnas = next((fila for fila in lector if fila), None)
+            if not columnas:
+                raise ErrorCatalogo('El catálogo de productos está vacío.')
+            if len(set(columnas)) != len(columnas):
+                raise ErrorCatalogo('El catálogo de productos contiene columnas duplicadas.')
+            filas = []
+            for fila in lector:
+                if not fila:
+                    continue
+                if len(fila) != len(columnas):
+                    raise ErrorCatalogo(
+                        f'El catálogo de productos tiene una fila incompleta o con columnas adicionales '
+                        f'(línea {lector.line_num}).'
+                    )
+                filas.append(fila)
+    except FileNotFoundError as error:
+        raise ErrorCatalogo(
+            'No se encontró el catálogo de productos. Configure data/catalogo_productos.csv.'
+        ) from error
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise ErrorCatalogo(f'No se pudo leer el catálogo de productos: {error}') from error
 
+    df = pd.DataFrame(filas, columns=columnas)
     columnas_requeridas = {
         'codigo', 'producto', 'categoria', 'sector', 'precio_actual'
     }
-    if not columnas_requeridas.issubset(df.columns):
-        raise ValueError(
-            'El catálogo no contiene todas las columnas requeridas.'
+    faltantes = columnas_requeridas - set(df.columns)
+    if faltantes:
+        raise ErrorCatalogo(
+            'Al catálogo de productos le faltan columnas: ' + ', '.join(sorted(faltantes))
+        )
+
+    if df.empty:
+        raise ErrorCatalogo('El catálogo de productos no contiene productos.')
+
+    codigos = df['codigo'].str.strip().str.lower()
+    if codigos.eq('').any():
+        raise ErrorCatalogo('El catálogo de productos contiene códigos vacíos.')
+    duplicados = codigos[codigos.duplicated()].unique()
+    if len(duplicados):
+        raise ErrorCatalogo(
+            'El catálogo de productos contiene códigos duplicados: ' + ', '.join(duplicados)
         )
 
     catalogo = []
@@ -72,7 +156,7 @@ def obtener_catalogo_bebidas():
         sector = str(fila['sector']).strip()
 
         precio = pd.to_numeric(fila['precio_actual'], errors='coerce')
-        habilitado = pd.notna(precio) and float(precio) >= 0
+        habilitado = pd.notna(precio) and math.isfinite(float(precio)) and float(precio) >= 0
 
         catalogo.append({
             'codigo': codigo,
@@ -92,11 +176,22 @@ def obtener_catalogo_bebidas():
 
 def _leer_archivo_consumos(archivo_consumos):
     """Lee el CSV de consumos y garantiza las columnas esperadas."""
+    with bloquear_consumos(archivo_consumos):
+        return _leer_archivo_consumos_bloqueado(archivo_consumos)
+
+
+def _leer_archivo_consumos_bloqueado(archivo_consumos):
+    """Lee y migra el histórico con el bloqueo ya adquirido."""
     if not os.path.exists(archivo_consumos):
         return pd.DataFrame(columns=CONSUMOS_COLUMNS)
 
     try:
-        df = pd.read_csv(archivo_consumos)
+        columnas = pd.read_csv(archivo_consumos, nrows=0).columns
+        texto = {
+            columna: str for columna in columnas
+            if columna not in ('habitacion', 'cantidad', 'precio_unitario', 'monto')
+        }
+        df = pd.read_csv(archivo_consumos, converters=texto)
     except EmptyDataError:
         return pd.DataFrame(columns=CONSUMOS_COLUMNS)
 
@@ -138,7 +233,7 @@ def _leer_archivo_consumos(archivo_consumos):
 
     # Guardar la migración para que los IDs permanezcan estables entre lecturas.
     if faltan_ids.any():
-        resultado.to_csv(archivo_consumos, index=False)
+        guardar_consumos_atomico(resultado, archivo_consumos)
 
     return resultado
 
@@ -480,14 +575,12 @@ def agregar_consumo_detallado(
 
         }
 
-        df = _leer_archivo_consumos(archivo_consumos)
-        if df.empty:
-            df = pd.DataFrame([nuevo_registro], columns=CONSUMOS_COLUMNS)
-        else:
+        with bloquear_consumos(archivo_consumos):
+            df = _leer_archivo_consumos_bloqueado(archivo_consumos)
             registro_completo = {columna: pd.NA for columna in df.columns}
             registro_completo.update(nuevo_registro)
             df.loc[len(df)] = registro_completo
-        df.to_csv(archivo_consumos, index=False)
+            guardar_consumos_atomico(df, archivo_consumos)
         return True
     except Exception as e:
         print(f"Error al agregar consumo: {e}")
@@ -507,7 +600,10 @@ def agregar_consumo_bebida_rapida(
 
     codigo_buscado = str(producto_codigo).strip().lower()
 
-    catalogo = obtener_catalogo_bebidas()
+    try:
+        catalogo = obtener_catalogo_bebidas()
+    except ErrorCatalogo as error:
+        return False, str(error)
     producto = next(
         (
             item for item in catalogo
@@ -558,6 +654,132 @@ def agregar_consumo_bebida_rapida(
     )
 
 
+def agregar_consumos_bebidas_multiples(
+    num_habitacion,
+    items,
+    archivo_consumos='data/consumos_diarios.csv',
+):
+    """Registra de una a tres bebidas mediante una actualización atómica.
+
+    Cada elemento contiene producto_codigo, cantidad, pasajero e id_estadia;
+    pasajero e id_estadia deben ser cadenas no vacías.
+    Los registros históricos sin id_consumo reciben uno al guardar el lote.
+    """
+    if not isinstance(items, (list, tuple)) or not 1 <= len(items) <= 3:
+        return False, 'Debe seleccionar entre 1 y 3 productos.'
+
+    try:
+        if isinstance(num_habitacion, bool):
+            raise ValueError
+        habitacion = int(str(num_habitacion).strip())
+        if habitacion <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return False, 'Número de habitación inválido.'
+
+    try:
+        catalogo = {
+            producto['codigo'].strip().lower(): producto
+            for producto in obtener_catalogo_bebidas()
+        }
+    except ErrorCatalogo as error:
+        return False, str(error)
+    registros = []
+    for numero, item in enumerate(items, start=1):
+        if not isinstance(item, dict) or not {
+            'producto_codigo', 'cantidad', 'pasajero', 'id_estadia'
+        }.issubset(item):
+            return False, f'Producto {numero}: faltan datos del consumo.'
+
+        codigo = str(item['producto_codigo']).strip().lower()
+        producto = catalogo.get(codigo)
+        if producto is None:
+            return False, f'Producto {numero}: producto de bebida no válido.'
+        if not producto['habilitado'] or producto['precio'] is None:
+            return False, f"Producto {numero}: el precio de {producto['nombre']} no está configurado."
+
+        try:
+            if isinstance(item['cantidad'], bool):
+                raise ValueError
+            cantidad = int(str(item['cantidad']).strip())
+            if cantidad <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return False, f'Producto {numero}: la cantidad debe ser un entero mayor a cero.'
+
+        pasajero = item['pasajero']
+        id_estadia = item['id_estadia']
+        if (
+            not isinstance(pasajero, str) or not pasajero.strip()
+            or not isinstance(id_estadia, str) or not id_estadia.strip()
+        ):
+            return False, f'Producto {numero}: pasajero o ID de estadía inválido.'
+
+        precio = float(producto['precio'])
+        registros.append({
+            'id_consumo': uuid.uuid4().hex,
+            'id_estadia': id_estadia.strip(),
+            'fecha': datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'habitacion': habitacion,
+            'pasajero': pasajero,
+            'categoria': 'Bebidas',
+            'item': producto['nombre'],
+            'cantidad': cantidad,
+            'precio_unitario': precio,
+            'monto': precio * cantidad,
+            'estado': 'vigente',
+            'fecha_anulacion': '',
+            'motivo_anulacion': '',
+        })
+
+    try:
+        with bloquear_consumos(archivo_consumos):
+            _guardar_bebidas_multiples_bloqueado(registros, archivo_consumos)
+    except (OSError, UnicodeError, csv.Error, ValueError) as error:
+        return False, f'No se pudieron registrar las bebidas: {error}'
+
+    return True, f'Se registraron {len(registros)} bebidas.'
+
+
+def _guardar_bebidas_multiples_bloqueado(registros, archivo_consumos):
+    ruta = Path(archivo_consumos)
+    historico = []
+    columnas_adicionales = []
+    if ruta.exists():
+        with ruta.open('r', encoding='utf-8-sig', newline='') as archivo:
+            lector = csv.DictReader(archivo, strict=True)
+            columnas = lector.fieldnames
+            if columnas is not None:
+                if not columnas or any(not columna for columna in columnas):
+                    raise ValueError('El archivo tiene encabezados inválidos.')
+                if len(columnas) != len(set(columnas)):
+                    raise ValueError('El archivo tiene columnas duplicadas.')
+                columnas_adicionales = [
+                    columna for columna in columnas
+                    if columna not in CONSUMOS_COLUMNS
+                ]
+                for fila in lector:
+                    if None in fila or any(valor is None for valor in fila.values()):
+                        raise ValueError('El archivo contiene una fila incompleta o con columnas adicionales.')
+                    if not fila.get('id_consumo', '').strip():
+                        fila['id_consumo'] = uuid.uuid4().hex
+                    if 'cantidad' not in fila:
+                        fila['cantidad'] = 1
+                    if 'precio_unitario' not in fila:
+                        fila['precio_unitario'] = fila.get('monto', 0)
+                    if not fila.get('estado', '').strip():
+                        fila['estado'] = 'vigente'
+                    historico.append(fila)
+
+    with archivo_consumos_temporal(archivo_consumos) as archivo:
+        escritor = csv.DictWriter(
+            archivo, fieldnames=CONSUMOS_COLUMNS + columnas_adicionales
+        )
+        escritor.writeheader()
+        escritor.writerows(historico)
+        escritor.writerows(registros)
+
+
 
 def eliminar_consumo_por_indice(num_habitacion, indice, archivo_consumos='data/consumos_diarios.csv'):
     """Compatibilidad temporal: la eliminación física de consumos está deshabilitada."""
@@ -576,35 +798,36 @@ def anular_consumo_por_indice(
         if not motivo:
             return False
 
-        df = _leer_archivo_consumos(archivo_consumos)
-        if df.empty:
-            return False
+        with bloquear_consumos(archivo_consumos):
+            df = _leer_archivo_consumos_bloqueado(archivo_consumos)
+            if df.empty:
+                return False
 
-        habitaciones = (
-            pd.to_numeric(df['habitacion'], errors='coerce')
-            .fillna(-1)
-            .astype(int)
-        )
-        indices_habitacion = df.index[
-            habitaciones == int(num_habitacion)
-        ].tolist()
+            habitaciones = (
+                pd.to_numeric(df['habitacion'], errors='coerce')
+                .fillna(-1)
+                .astype(int)
+            )
+            indices_habitacion = df.index[
+                habitaciones == int(num_habitacion)
+            ].tolist()
 
-        if indice < 0 or indice >= len(indices_habitacion):
-            return False
+            if indice < 0 or indice >= len(indices_habitacion):
+                return False
 
-        indice_global = indices_habitacion[indice]
+            indice_global = indices_habitacion[indice]
 
-        estado = str(df.at[indice_global, 'estado']).strip().lower()
-        if estado == 'anulado':
-            return False
+            estado = str(df.at[indice_global, 'estado']).strip().lower()
+            if estado == 'anulado':
+                return False
 
-        df.at[indice_global, 'estado'] = 'anulado'
-        df.at[indice_global, 'fecha_anulacion'] = (
-            datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        )
-        df.at[indice_global, 'motivo_anulacion'] = motivo
+            df.at[indice_global, 'estado'] = 'anulado'
+            df.at[indice_global, 'fecha_anulacion'] = (
+                datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            )
+            df.at[indice_global, 'motivo_anulacion'] = motivo
 
-        df.to_csv(archivo_consumos, index=False)
+            guardar_consumos_atomico(df, archivo_consumos)
         return True
 
     except Exception as e:
@@ -630,26 +853,27 @@ def anular_consumo_por_id(
         id_consumo = str(id_consumo or '').strip()
         if not motivo or not id_consumo:
             return False
-        df = _leer_archivo_consumos(archivo_consumos)
-        if df.empty or 'id_consumo' not in df.columns:
-            return False
-        coincidencias = df.index[df['id_consumo'].astype(str).str.strip().eq(id_consumo)].tolist()
-        if len(coincidencias) != 1:
-            return False
-        indice = coincidencias[0]
-        try:
-            habitacion_registro = int(float(df.at[indice, 'habitacion']))
-        except (TypeError, ValueError):
-            return False
-        if habitacion_registro != int(num_habitacion):
-            return False
-        estado = str(df.at[indice, 'estado'] or 'vigente').strip().lower()
-        if estado == 'anulado':
-            return False
-        df.at[indice, 'estado'] = 'anulado'
-        df.at[indice, 'fecha_anulacion'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        df.at[indice, 'motivo_anulacion'] = motivo
-        df.to_csv(archivo_consumos, index=False)
+        with bloquear_consumos(archivo_consumos):
+            df = _leer_archivo_consumos_bloqueado(archivo_consumos)
+            if df.empty or 'id_consumo' not in df.columns:
+                return False
+            coincidencias = df.index[df['id_consumo'].astype(str).str.strip().eq(id_consumo)].tolist()
+            if len(coincidencias) != 1:
+                return False
+            indice = coincidencias[0]
+            try:
+                habitacion_registro = int(float(df.at[indice, 'habitacion']))
+            except (TypeError, ValueError):
+                return False
+            if habitacion_registro != int(num_habitacion):
+                return False
+            estado = str(df.at[indice, 'estado'] or 'vigente').strip().lower()
+            if estado == 'anulado':
+                return False
+            df.at[indice, 'estado'] = 'anulado'
+            df.at[indice, 'fecha_anulacion'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            df.at[indice, 'motivo_anulacion'] = motivo
+            guardar_consumos_atomico(df, archivo_consumos)
         return True
     except Exception as e:
         print(f"Error al anular consumo por ID: {e}")

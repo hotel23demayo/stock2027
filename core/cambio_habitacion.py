@@ -5,10 +5,26 @@ Permite mover un huésped de una habitación a otra manteniendo sus consumos.
 
 import pandas as pd
 import os
+from core.consumos import bloquear_consumos, guardar_consumos_atomico
 from core.dashboard import extraer_num_hab
 
 DB_PASAJEROS = 'data/pasajeros.csv'
 DB_CONSUMOS = 'data/consumos_diarios.csv'
+
+
+def _trasladar_consumos(ids_estadia, habitacion_destino):
+    with bloquear_consumos(DB_CONSUMOS):
+        if not os.path.exists(DB_CONSUMOS):
+            return 0
+        df = pd.read_csv(DB_CONSUMOS, dtype=str, keep_default_na=False)
+        if not ids_estadia or 'id_estadia' not in df.columns:
+            return 0
+        seleccion = df['id_estadia'].str.strip().isin(ids_estadia)
+        cantidad = int(seleccion.sum())
+        if cantidad:
+            df.loc[seleccion, 'habitacion'] = str(habitacion_destino)
+            guardar_consumos_atomico(df, DB_CONSUMOS)
+        return cantidad
 
 
 def _obtener_letra_cama(valor_habitacion):
@@ -152,7 +168,7 @@ def cambiar_habitacion(habitacion_origen, habitacion_destino, motivo=""):
     
     try:
         # 1. Verificar que la habitación origen esté ocupada
-        df_pasajeros = pd.read_csv(DB_PASAJEROS)
+        df_pasajeros = pd.read_csv(DB_PASAJEROS, converters={'id_estadia': str})
         df_pasajeros['_num_hab'] = df_pasajeros['Nro. habitación'].apply(extraer_num_hab)
         pasajero_origen = df_pasajeros[df_pasajeros['_num_hab'] == habitacion_origen]
         
@@ -198,32 +214,14 @@ def cambiar_habitacion(habitacion_origen, habitacion_destino, motivo=""):
         df_pasajeros.to_csv(DB_PASAJEROS, index=False)
         
         # 6. Actualizar consumos si existen
-        consumos_actualizados = 0
-        if os.path.exists(DB_CONSUMOS):
-            df_consumos = pd.read_csv(DB_CONSUMOS)
-            ids_estadia = set()
-            if 'id_estadia' in pasajero_origen.columns:
-                ids_estadia = {
-                    str(identificador).strip()
-                    for identificador in pasajero_origen['id_estadia']
-                    if pd.notna(identificador) and str(identificador).strip()
-                }
-
-            if ids_estadia and 'id_estadia' in df_consumos.columns:
-                ids_consumos = (
-                    df_consumos['id_estadia']
-                    .fillna('')
-                    .astype(str)
-                    .str.strip()
-                )
-                mask_consumos = ids_consumos.isin(ids_estadia)
-                consumos_actualizados = int(mask_consumos.sum())
-            else:
-                mask_consumos = pd.Series(False, index=df_consumos.index)
-
-            if consumos_actualizados:
-                df_consumos.loc[mask_consumos, 'habitacion'] = habitacion_destino
-                df_consumos.to_csv(DB_CONSUMOS, index=False)
+        ids_estadia = set()
+        if 'id_estadia' in pasajero_origen.columns:
+            ids_estadia = {
+                str(identificador).strip()
+                for identificador in pasajero_origen['id_estadia']
+                if pd.notna(identificador) and str(identificador).strip()
+            }
+        consumos_actualizados = _trasladar_consumos(ids_estadia, habitacion_destino)
         
         mensaje = f"Cambio exitoso: {nombre_pasajero} movido de habitación {habitacion_origen} → {habitacion_destino}"
         if consumos_actualizados > 0:
@@ -318,7 +316,7 @@ def cambiar_pasajero_individual(habitacion_origen, habitacion_destino, nombre_pa
     nombre_pasajero = str(nombre_pasajero).strip()
 
     try:
-        df_pasajeros = pd.read_csv(DB_PASAJEROS)
+        df_pasajeros = pd.read_csv(DB_PASAJEROS, converters={'id_estadia': str})
         df_pasajeros['_num_hab'] = df_pasajeros['Nro. habitación'].apply(extraer_num_hab)
 
         mask_pasajero_origen = (
@@ -365,30 +363,10 @@ def cambiar_pasajero_individual(habitacion_origen, habitacion_destino, nombre_pa
         df_pasajeros = df_pasajeros.drop(columns=['_num_hab'])
         df_pasajeros.to_csv(DB_PASAJEROS, index=False)
 
-        consumos_actualizados = 0
-        if os.path.exists(DB_CONSUMOS):
-            df_consumos = pd.read_csv(DB_CONSUMOS)
-            identificador = fila_pasajero.iloc[0].get('id_estadia', '')
-            identificador = (
-                ''
-                if pd.isna(identificador)
-                else str(identificador).strip()
-            )
-            if identificador and 'id_estadia' in df_consumos.columns:
-                mask_consumos = (
-                    df_consumos['id_estadia']
-                    .fillna('')
-                    .astype(str)
-                    .str.strip()
-                    .eq(identificador)
-                )
-                consumos_actualizados = int(mask_consumos.sum())
-            else:
-                mask_consumos = pd.Series(False, index=df_consumos.index)
-
-            if consumos_actualizados > 0:
-                df_consumos.loc[mask_consumos, 'habitacion'] = habitacion_destino
-                df_consumos.to_csv(DB_CONSUMOS, index=False)
+        identificador = fila_pasajero.iloc[0].get('id_estadia', '')
+        identificador = '' if pd.isna(identificador) else str(identificador).strip()
+        ids_estadia = {identificador} if identificador else set()
+        consumos_actualizados = _trasladar_consumos(ids_estadia, habitacion_destino)
 
         mensaje = (
             f"Cambio parcial exitoso: {nombre_pasajero} movido de habitación "

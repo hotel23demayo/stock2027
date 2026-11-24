@@ -398,7 +398,8 @@ recepcion2026-consumos/
 ├── data/                      # Datos persistentes
 │   ├── pasajeros.csv         # Registro actual de huéspedes
 │   ├── consumos_diarios.csv  # Base de datos de consumos
-│   ├── catalogo_productos.csv # Catálogo y precios (versionado)
+│   ├── catalogo_productos.csv # Catálogo operativo local (ignorado por Git)
+│   ├── catalogo_productos.ejemplo.csv # Ejemplo ficticio versionado
 │   └── backups/              # Backups automáticos y de reinicio
 │
 ├── core/                      # Módulos principales
@@ -427,6 +428,29 @@ recepcion2026-consumos/
 └── static/                    # Recursos estáticos
     └── (CSS, JS, imágenes)
 ```
+
+---
+
+## 🥤 Catálogo local de productos
+
+Cada instalación mantiene su propio `data/catalogo_productos.csv`, fuera de
+Git. Los productos, precios y orden del entorno personal no se sincronizan
+con los del hotel. El archivo `data/catalogo_productos.ejemplo.csv` es una
+referencia ficticia; nunca se copia ni reemplaza automáticamente el operativo.
+
+Para una instalación nueva, preparar el catálogo local con las columnas
+`codigo,producto,categoria,sector,precio_actual` y los datos aprobados para
+ese entorno. Los códigos deben ser únicos, incluso sin distinguir mayúsculas
+ni espacios alrededor. Un precio vacío deshabilita ese producto. Sin un
+catálogo válido la pantalla informa el problema y no permite cargar bebidas.
+
+**Antes de actualizar una instalación que aún tiene el catálogo seguido por
+Git**, respaldar su archivo fuera del repositorio y verificar la copia: la
+actualización que retira el archivo del repositorio puede eliminarlo o generar
+un conflicto. Tras actualizar, comprobar el catálogo y, si falta, restaurar la
+copia propia antes de iniciar la aplicación. Mantener respaldos separados para
+cada entorno; no usar el ejemplo para restaurar el catálogo institucional.
+Ver [data/README.md](data/README.md).
 
 ---
 

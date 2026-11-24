@@ -25,6 +25,21 @@ mostrar_ayuda() {
     exit 1
 }
 
+adquirir_bloqueo_consumos() {
+    RUTA_CONSUMOS=$(readlink -f -- data/consumos_diarios.csv) || {
+        echo "No se pudo resolver la ruta de consumos." >&2
+        return 1
+    }
+    exec {BLOQUEO_CONSUMOS}>>"${RUTA_CONSUMOS}.lock" || {
+        echo "No se pudo abrir el archivo de bloqueo de consumos." >&2
+        return 1
+    }
+    flock -x "$BLOQUEO_CONSUMOS" || {
+        echo "No se pudo adquirir el bloqueo de consumos." >&2
+        return 1
+    }
+}
+
 # Verificar argumento
 if [ $# -eq 0 ]; then
     mostrar_ayuda
@@ -61,17 +76,22 @@ git add .
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 git commit -m "💾 Guardado automático antes de cambiar a temporada $TEMPORADA - $TIMESTAMP" 2>/dev/null || echo "No hay cambios que guardar"
 
+adquirir_bloqueo_consumos || exit 1
+
 # Hacer backup de datos actuales
 echo ""
 echo -e "${BLUE}💾 Creando backup de datos...${NC}"
-mkdir -p data/backups
+mkdir -p data/backups || exit 1
 if [ -f data/pasajeros.csv ]; then
     cp data/pasajeros.csv "data/backups/pasajeros_backup_${TIMESTAMP}.csv"
     echo -e "${GREEN}✅ Backup creado: pasajeros_backup_${TIMESTAMP}.csv${NC}"
 fi
 
-if [ -f data/consumos_diarios.csv ]; then
-    cp data/consumos_diarios.csv "data/backups/consumos_backup_${TIMESTAMP}.csv"
+if [ -f "$RUTA_CONSUMOS" ]; then
+    if ! cp "$RUTA_CONSUMOS" "data/backups/consumos_backup_${TIMESTAMP}.csv"; then
+        echo "No se pudo respaldar el archivo de consumos; se canceló el cambio." >&2
+        exit 1
+    fi
     echo -e "${GREEN}✅ Backup creado: consumos_backup_${TIMESTAMP}.csv${NC}"
 fi
 
@@ -95,7 +115,27 @@ echo ""
 echo -e "${BLUE}🧹 Limpiando datos de temporada anterior...${NC}"
 
 # Resetear consumos
-echo "fecha,habitacion,pasajero,categoria,monto" > data/consumos_diarios.csv
+if [ "$(readlink -f -- data/consumos_diarios.csv)" != "$RUTA_CONSUMOS" ]; then
+    echo "La ruta de consumos cambió durante el cambio de temporada." >&2
+    exit 1
+fi
+TEMPORAL_CONSUMOS=$(mktemp "${RUTA_CONSUMOS}.tmp.XXXXXX") || {
+    echo "No se pudo crear el archivo temporal de consumos." >&2
+    exit 1
+}
+trap 'rm -f -- "$TEMPORAL_CONSUMOS"' EXIT
+if [ -e "$RUTA_CONSUMOS" ]; then
+    chmod --reference="$RUTA_CONSUMOS" "$TEMPORAL_CONSUMOS" || exit 1
+else
+    chmod =rw "$TEMPORAL_CONSUMOS" || exit 1
+fi
+if ! printf '%s\n' "fecha,habitacion,pasajero,categoria,monto" > "$TEMPORAL_CONSUMOS" ||
+   ! mv -fT -- "$TEMPORAL_CONSUMOS" "$RUTA_CONSUMOS"; then
+    echo "No se pudo reiniciar el archivo de consumos." >&2
+    exit 1
+fi
+trap - EXIT
+exec {BLOQUEO_CONSUMOS}>&-
 echo -e "${GREEN}✅ Consumos reseteados${NC}"
 
 # Información sobre pasajeros.csv

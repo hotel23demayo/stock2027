@@ -44,18 +44,51 @@ id_consumo,id_estadia,fecha,habitacion,pasajero,categoria,item,cantidad,precio_u
 - Chequear Cuentas permite imprimir el detalle informativo no fiscal de cada cuenta activa y descargar un Excel con el resumen y el detalle filtrable. El Excel muestra los anulados con importe confirmado cero; las observaciones se revisan en el control. Ninguna de estas consultas modifica los CSV originales.
 - Las columnas faltantes en archivos viejos se migran automáticamente al leer.
 
+Las escrituras coordinadas usan `consumos_diarios.csv.lock` junto al CSV. Es un
+archivo permanente de bloqueo: no debe borrarse ni reemplazarse mientras la
+aplicación o el reinicio estén activos. El bloqueo es cooperativo y requiere
+un sistema de archivos compatible con `flock`; no protege frente a editores
+externos ni sincronización entre copias independientes. Mantener el reinicio
+con la aplicación cerrada.
+
 **Para empezar de cero** (p. ej. tras las pruebas) usar el script de reinicio, que hace backup antes de vaciar: ver [REINICIO_DATOS.md](../REINICIO_DATOS.md).
 
 ---
 
 ### 2️⃣ bis `catalogo_productos.csv`
 
-Catálogo de productos y precios. **Sí está versionado en Git** y no es dato operativo: el reinicio no lo modifica.
+Catálogo operativo local de productos y precios. Git lo ignora: cada entorno
+mantiene sus propios productos, precios y orden. El reinicio no lo modifica.
 
 ```csv
 codigo,producto,categoria,sector,precio_actual
-nampe_malbec,Nampe Malbec,vinos,Bar,6500
+ejemplo_bebida_1,PRODUCTO FICTICIO EJEMPLO 1,gaseosas,EJEMPLO,100
 ```
+
+`catalogo_productos.ejemplo.csv` está versionado y contiene exclusivamente
+datos y precios ficticios. Es una referencia de formato, no un catálogo para
+utilizar en el hotel: no se copia automáticamente ni reemplaza ningún archivo.
+
+En una instalación nueva, crear `catalogo_productos.csv` con ese encabezado y
+los productos y precios aprobados para el entorno. Cada código debe ser único,
+sin distinguir mayúsculas ni espacios alrededor; el orden de las filas determina
+el orden de los botones. Un precio vacío deshabilita el producto. Si falta el
+archivo o su estructura es inválida, la carga de bebidas queda deshabilitada
+y se informa el motivo.
+
+Antes de actualizar desde una versión que aún sigue este archivo en Git:
+
+1. Cerrar la aplicación y copiar el catálogo propio a un lugar seguro **fuera
+   del repositorio**. Comprobar que la copia sea idéntica al original.
+2. Actualizar el código solo después de comprobar el respaldo. Git puede
+   eliminar el archivo seguido o detenerse por un conflicto de cambios locales.
+3. Si el catálogo falta después de actualizar, restaurar la copia propia en
+   `data/catalogo_productos.csv` y comprobar sus productos, precios y orden
+   antes de iniciar la aplicación. Si hay un conflicto, detenerse y revisarlo.
+
+Repetir el procedimiento por separado en la computadora personal y en la
+institucional; nunca intercambiar sus copias. Guardar respaldos periódicos:
+Git no protege el archivo operativo y las ramas antiguas pueden seguirlo.
 
 ---
 
@@ -78,6 +111,8 @@ data/
 ├── README.md                    # Este archivo
 ├── pasajeros.csv               # ⚠️ NO SUBIR AL REPO
 ├── consumos_diarios.csv        # ⚠️ NO SUBIR AL REPO
+├── catalogo_productos.csv      # ⚠️ Catálogo local, NO SUBIR AL REPO
+├── catalogo_productos.ejemplo.csv # Ejemplo ficticio versionado
 ├── consultaRegimenReport.csv   # ⚠️ NO SUBIR AL REPO (opcional)
 ├── testJubis.csv               # ⚠️ NO SUBIR AL REPO (opcional)
 └── backups/                    # ⚠️ NO SUBIR AL REPO
@@ -88,9 +123,9 @@ data/
 
 ## 🔒 Seguridad
 
-- ✅ Todos los archivos `.csv` están ignorados por Git (ver `.gitignore`)
+- ✅ Los CSV operativos están ignorados por Git (ver `.gitignore`)
 - ✅ La carpeta `backups/` está ignorada por Git
-- ✅ Solo archivos `*_ejemplo.csv` se pueden subir al repositorio
+- ✅ El catálogo de ejemplo ficticio puede subirse al repositorio
 - ⚠️ **NUNCA** hacer commit de datos reales de pasajeros
 
 ---

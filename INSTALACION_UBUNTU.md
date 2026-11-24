@@ -79,6 +79,12 @@ cd /home/TU_USUARIO/recepcion2026
 
 ## ✅ Verificación de la Instalación
 
+Antes de utilizar la carga rápida de bebidas, preparar
+`data/catalogo_productos.csv` con los productos y precios aprobados para esta
+instalación. `data/catalogo_productos.ejemplo.csv` solo muestra el formato con
+datos ficticios: no se copia automáticamente ni reemplaza un catálogo existente.
+Ver las instrucciones y precauciones en [data/README.md](data/README.md).
+
 1. Al ejecutar el script, deberías ver:
    - Creación del entorno virtual (primera vez)
    - Instalación de dependencias
@@ -122,6 +128,13 @@ Una vez configurado, los usuarios solo necesitan:
 4. Cuando terminen, cerrar la ventana de terminal (Ctrl+C)
 
 ## 🔄 Actualizar el Sistema
+
+Antes de actualizar una instalación que todavía tiene el catálogo seguido por
+Git, cerrar la aplicación, respaldar `data/catalogo_productos.csv` fuera del
+repositorio y comprobar que la copia sea idéntica. La actualización que lo
+retira de Git puede eliminarlo o detenerse por un conflicto. Después de
+actualizar, comprobarlo y restaurar la copia propia si falta, antes de reiniciar
+la aplicación. Mantener copias separadas para el entorno personal y el hotel.
 
 Para obtener la última versión del repositorio:
 

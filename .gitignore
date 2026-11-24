@@ -30,6 +30,7 @@ instance/
 
 # Archivos de datos sensibles - NO subir al repositorio
 data/*.csv
+data/*.csv.lock
 data/backups/
 data/cierres/*.csv
 data/cierres/*.xlsx
@@ -59,7 +60,7 @@ legacy-respaldo.bundle.*
 
 # Datos operativos locales
 data/*.csv
-!data/catalogo_productos.csv
+!data/catalogo_productos.ejemplo.csv
 data/backups/
 data/cierres/
 
